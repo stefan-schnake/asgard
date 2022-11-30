@@ -28,6 +28,7 @@
 #include "pde/pde_fokkerplanck1_pitch_E.hpp"
 #include "pde/pde_fokkerplanck2_complete.hpp"
 #include "pde/pde_vlasov_lb_full_f.hpp"
+#include "pde/pde_pitch_angle_1x_2v.hpp"
 #include "tensors.hpp"
 
 namespace asgard
@@ -93,6 +94,8 @@ std::unique_ptr<PDE<P>> make_PDE(parser const &cli_input)
     return std::make_unique<PDE_advection_1d<P>>(cli_input);
   case PDE_opts::vlasov_lb_full_f:
     return std::make_unique<PDE_vlasov_lb<P>>(cli_input);
+  case PDE_opts::pitch_angle_1x_2v:
+    return std::make_unique<PDE_pitch_angle_1x_2v<P>>(cli_input);
   default:
     std::cout << "Invalid pde choice" << std::endl;
     exit(-1);
@@ -179,6 +182,9 @@ make_PDE(PDE_opts const pde_choice, int const level = parser::NO_USER_VALUE,
 
     case PDE_opts::vlasov_lb_full_f:
       return fk::vector<int>(std::vector<int>(2, level));
+
+    case PDE_opts::pitch_angle_1x_2v:
+      return fk::vector<int>(std::vector<int>(3, level));
 
     default:
       std::cout << "Invalid pde choice" << std::endl;
