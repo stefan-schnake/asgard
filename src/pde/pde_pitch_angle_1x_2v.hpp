@@ -50,7 +50,7 @@ private:
   // these fields used to check correctness of specification
   static int constexpr num_dims_           = 3;
   static int constexpr num_sources_        = 0;
-  static int constexpr num_terms_          = 3;
+  static int constexpr num_terms_          = 1;
   static bool constexpr do_poisson_solve_  = false;
   static bool constexpr has_analytic_soln_ = true;
 
@@ -224,9 +224,14 @@ private:
 
   // upwind div in x
   inline static partial_term<P> const partial_term_x_1_1 =
-      partial_term<P>(coefficient_type::div, g_func_neg_1, dim0_dV,
-                      flux_type::upwind, boundary_condition::periodic,
-                      boundary_condition::periodic);
+      partial_term<P>(
+        coefficient_type::div, g_func_neg_1,
+        partial_term<P>::null_gfunc, flux_type::central, 
+        boundary_condition::periodic, boundary_condition::periodic,
+        homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim0_dV);
 
   inline static term<P> const term1_x = term<P>(false,  // time-dependent
                                            "dx_downwind", // name
@@ -234,8 +239,13 @@ private:
 
   // mass in r
   inline static partial_term<P> const partial_term_r_1_1 = partial_term<P>(
-      coefficient_type::mass, g_func_identity, dim1_dV, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
+      coefficient_type::mass, g_func_identity, 
+      partial_term<P>::null_gfunc, flux_type::central,
+      boundary_condition::periodic, boundary_condition::periodic,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim1_dV);
 
   inline static term<P> const term1_r = term<P>(false, // time-dependent
                                                     "mass_r", // name
@@ -243,8 +253,13 @@ private:
 
   // mass in z with g(x) = z.*(z > 0)
   inline static partial_term<P> const partial_term_z_1_1 = partial_term<P>(
-      coefficient_type::mass, g_func_x_pos, dim2_dV, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
+      coefficient_type::mass, g_func_identity, 
+      partial_term<P>::null_gfunc, flux_type::central,
+      boundary_condition::periodic, boundary_condition::periodic,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim2_dV);
 
   inline static term<P> const term1_z = term<P>(false, // time-dependent
                                                     "mass_z*(z>0)", // name
@@ -258,11 +273,11 @@ private:
   // downwind div in x
   inline static partial_term<P> const partial_term_x_2_1 =
       partial_term<P>(coefficient_type::div, g_func_neg_1, dim0_dV,
-                      flux_type::downwind, boundary_condition::periodic,
+                      flux_type::upwind, boundary_condition::periodic,
                       boundary_condition::periodic);
 
   inline static term<P> const term2_x = term<P>(false,  // time-dependent
-                                           "dx_downwind", // name
+                                           "dx_upwind", // name
                                            {partial_term_x_2_1});
 
   // mass in r not changed from previous term
@@ -307,7 +322,7 @@ private:
                       boundary_condition::dirichlet);
 
    inline static partial_term<P> const partial_term_z_3_2 =
-      partial_term<P>(coefficient_type::div, g_func_identity, g_func_sqrt_1mx2,
+      partial_term<P>(coefficient_type::grad, g_func_identity, g_func_sqrt_1mx2,
                       flux_type::upwind, boundary_condition::neumann,
                       boundary_condition::neumann);
 
@@ -317,7 +332,8 @@ private:
 
   inline static std::vector<term<P>> const terms3_ = {term3_x, term3_r, term3_z};
 
-  inline static term_set<P> const terms_ = {terms1_, terms2_, terms3_};
+  //inline static term_set<P> const terms_ = {terms1_, terms2_, terms3_};
+  inline static term_set<P> const terms_ = {terms1_};
 
   inline static std::vector<source<P>> const sources_ = {};
 
