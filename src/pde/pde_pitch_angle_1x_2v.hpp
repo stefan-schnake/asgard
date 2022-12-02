@@ -50,7 +50,7 @@ private:
   // these fields used to check correctness of specification
   static int constexpr num_dims_           = 3;
   static int constexpr num_sources_        = 0;
-  static int constexpr num_terms_          = 1;
+  static int constexpr num_terms_          = 3;
   static bool constexpr do_poisson_solve_  = false;
   static bool constexpr has_analytic_soln_ = true;
 
@@ -68,6 +68,7 @@ private:
     for (int i=0;i < x.size();++i) {
       //fx[i] = 0.5*std::sin(PI * x[i]) + 1.0;
       fx[i]=1.0;
+      //x[i] > 0 ? fx[i] = 1.0 : fx[i] = 0.0;
     }
     return fx;
   }
@@ -131,7 +132,7 @@ private:
   static P exact_time(P const time) { 
     ignore(time);
     return 1.0; 
-    }
+  }
 
 
   // CFL condition
@@ -183,6 +184,13 @@ private:
     ignore(time);
     return std::sqrt(1.0-x*x);
   }
+  // g(x) = sqrt(1-x^2)
+  static P g_func_const(P const x, P const time)
+  {
+    ignore(time);
+    ignore(x);
+    return 10000.0;
+  }
 
   // define dimensions
   inline static dimension<P> const dim0_ =
@@ -226,7 +234,7 @@ private:
   inline static partial_term<P> const partial_term_x_1_1 =
       partial_term<P>(
         coefficient_type::div, g_func_neg_1,
-        partial_term<P>::null_gfunc, flux_type::central, 
+        partial_term<P>::null_gfunc, flux_type::downwind, 
         boundary_condition::periodic, boundary_condition::periodic,
         homogeneity::homogeneous, homogeneity::homogeneous,
                       {}, partial_term<P>::null_scalar_func,
@@ -239,7 +247,7 @@ private:
 
   // mass in r
   inline static partial_term<P> const partial_term_r_1_1 = partial_term<P>(
-      coefficient_type::mass, g_func_identity, 
+      coefficient_type::mass, g_func_x, 
       partial_term<P>::null_gfunc, flux_type::central,
       boundary_condition::periodic, boundary_condition::periodic,
       homogeneity::homogeneous, homogeneity::homogeneous,
@@ -253,7 +261,7 @@ private:
 
   // mass in z with g(x) = z.*(z > 0)
   inline static partial_term<P> const partial_term_z_1_1 = partial_term<P>(
-      coefficient_type::mass, g_func_identity, 
+      coefficient_type::mass, g_func_x_pos, 
       partial_term<P>::null_gfunc, flux_type::central,
       boundary_condition::periodic, boundary_condition::periodic,
       homogeneity::homogeneous, homogeneity::homogeneous,
@@ -272,9 +280,14 @@ private:
 
   // downwind div in x
   inline static partial_term<P> const partial_term_x_2_1 =
-      partial_term<P>(coefficient_type::div, g_func_neg_1, dim0_dV,
-                      flux_type::upwind, boundary_condition::periodic,
-                      boundary_condition::periodic);
+      partial_term<P>(
+        coefficient_type::div, g_func_neg_1,
+        partial_term<P>::null_gfunc, flux_type::upwind, 
+        boundary_condition::periodic, boundary_condition::periodic,
+        homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim0_dV);
 
   inline static term<P> const term2_x = term<P>(false,  // time-dependent
                                            "dx_upwind", // name
@@ -285,8 +298,13 @@ private:
 
   // mass in z with g(z) = z.*(z < 0)
   inline static partial_term<P> const partial_term_z_2_1 = partial_term<P>(
-      coefficient_type::mass, g_func_x_neg, dim2_dV, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
+      coefficient_type::mass, g_func_x_neg, 
+      partial_term<P>::null_gfunc, flux_type::central,
+      boundary_condition::periodic, boundary_condition::periodic,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim2_dV);
 
   inline static term<P> const term2_z = term<P>(false, // time-dependent
                                                     "mass_z*(z<0)", // name
@@ -299,8 +317,13 @@ private:
 
   // mass in x
   inline static partial_term<P> const partial_term_x_3_1 = partial_term<P>(
-      coefficient_type::mass, g_func_identity, dim0_dV, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
+      coefficient_type::mass, g_func_const, 
+      partial_term<P>::null_gfunc, flux_type::central,
+      boundary_condition::periodic, boundary_condition::periodic,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      dim0_dV);
 
   inline static term<P> const term3_x = term<P>(false, // time-dependent
                                                     "mass_x", // name
@@ -308,8 +331,13 @@ private:
 
   // mass in r (differs from above because of surface jacobian)
   inline static partial_term<P> const partial_term_r_3_1 = partial_term<P>(
-      coefficient_type::mass, g_func_identity, g_func_x, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
+      coefficient_type::mass, g_func_identity, 
+      partial_term<P>::null_gfunc, flux_type::central,
+      boundary_condition::periodic, boundary_condition::periodic,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      g_func_x);
 
   inline static term<P> const term3_r = term<P>(false, // time-dependent
                                                     "mass_r", // name
@@ -317,14 +345,22 @@ private:
 
   // LDG in z
   inline static partial_term<P> const partial_term_z_3_1 =
-      partial_term<P>(coefficient_type::div, g_func_identity, g_func_sqrt_1mx2,
-                      flux_type::downwind, boundary_condition::dirichlet,
-                      boundary_condition::dirichlet);
+      partial_term<P>(coefficient_type::div, g_func_identity,
+                      partial_term<P>::null_gfunc, flux_type::downwind, 
+                      boundary_condition::dirichlet, boundary_condition::dirichlet,
+                      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      g_func_sqrt_1mx2);
 
    inline static partial_term<P> const partial_term_z_3_2 =
-      partial_term<P>(coefficient_type::grad, g_func_identity, g_func_sqrt_1mx2,
-                      flux_type::upwind, boundary_condition::neumann,
-                      boundary_condition::neumann);
+      partial_term<P>(coefficient_type::grad, g_func_identity,
+                      partial_term<P>::null_gfunc, flux_type::upwind, 
+                      boundary_condition::neumann, boundary_condition::neumann,
+                      homogeneity::homogeneous, homogeneity::homogeneous,
+                      {}, partial_term<P>::null_scalar_func,
+                      {}, partial_term<P>::null_scalar_func,
+                      g_func_sqrt_1mx2);
 
   inline static term<P> const term3_z = term<P>(false,  // time-dependent
                                            "LDG_z", // name
@@ -332,14 +368,17 @@ private:
 
   inline static std::vector<term<P>> const terms3_ = {term3_x, term3_r, term3_z};
 
-  //inline static term_set<P> const terms_ = {terms1_, terms2_, terms3_};
-  inline static term_set<P> const terms_ = {terms1_};
+  inline static term_set<P> const terms_ = {terms1_, terms2_, terms3_};
+  //inline static term_set<P> const terms_ = {terms1_,terms2_};
 
   inline static std::vector<source<P>> const sources_ = {};
 
   // define exact soln
   inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {
       exact_solution_dim0, exact_solution_dim1, exact_solution_dim2};
+
+  //inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {
+  //    initial_condition_dim0, initial_condition_dim1, initial_condition_dim2};
 
   inline static scalar_func<P> const exact_scalar_func_ = exact_time;
 };

@@ -229,6 +229,9 @@ int main(int argc, char **argv)
   // -- time loop
 
   asgard::fk::vector<prec> f_val(initial_condition);
+  asgard::fk::vector<prec> IC = asgard::fk::vector<prec>(f_val.size());
+  asgard::fk::vector<prec> ICdiff = asgard::fk::vector<prec>(f_val.size());
+  asgard::fm::copy(f_val,IC);
   asgard::node_out() << "--- begin time loop w/ dt " << pde->get_dt()
                      << " ---\n";
   for (auto i = 0; i < opts.num_time_steps; ++i)
@@ -247,6 +250,13 @@ int main(int argc, char **argv)
         default_workspace_MB, update_system);
     f_val.resize(sol.size()) = sol;
     asgard::tools::timer.stop(time_id);
+
+    // print distance away from IC
+    asgard::fm::copy(IC,ICdiff);
+    asgard::fm::axpy(f_val,ICdiff,-1.0);
+    prec dist = asgard::fm::nrm2(ICdiff);
+    std::cout << "Difference from IC:" << dist << "\n";
+
 
     // print root mean squared error from analytic solution
     if (pde->has_analytic_soln)
@@ -340,6 +350,7 @@ int main(int argc, char **argv)
     {
       ml_plot.plot_fval(*pde, adaptive_grid.get_table(), real_space,
                         analytic_solution_realspace);
+      ml_plot.set_var("f_val_analytic" + std::to_string(i), ml_plot.create_array({1, (unsigned long)analytic_solution_realspace.size()}, analytic_solution_realspace));
     }
 #endif
 

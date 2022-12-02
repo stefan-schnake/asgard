@@ -5,6 +5,9 @@ if nargin >= 4
     overPlotAnalytic = 1;
 end
 
+plot_analytic = ~(norm(solutions) < 1e-16);
+%plot_analytic = true;
+
 if num_dims==1
     
     %%
@@ -190,12 +193,17 @@ if num_dims==3
     
     %%
     % Plot a 2D xy plane
-    
-    ax1 = subplot(2,3,1);
+
+    if plot_analytic
+        ax1 = subplot(2,3,1);
+    else
+        ax1 = subplot(1,3,1);
+        axis square
+    end
     contourf(z,y,f_nD(:,:,sx)');
     title('2D slice through 3D numeric');
     
-    if ~isempty(solutions)
+    if ~isempty(solutions) && plot_analytic
         ax2 = subplot(2,3,4);
         contourf(z,y,f_nD_analytic(:,:,sx)');
         title('2D slice through 3D analytic');
@@ -204,11 +212,17 @@ if num_dims==3
     %%
     % Plot a 2D xz plane
     
-    ax3 = subplot(2,3,2);
+    if plot_analytic
+        ax3 = subplot(2,3,2);
+    else
+        ax3 = subplot(1,3,2);
+        axis square
+    end
+    
     contourf(z,x,squeeze(f_nD(:,sy,:))');
     title('2D slice through 3D numeric');
     
-    if ~isempty(solutions)
+    if ~isempty(solutions) && plot_analytic
         ax3 = subplot(2,3,5);
         contourf(z,x,squeeze(f_nD_analytic(:,sy,:))');
         title('2D slice through 3D analytic');
@@ -216,12 +230,19 @@ if num_dims==3
     
     %%
     % Plot a 2D yz plane
+
+    if plot_analytic
+        ax3 = subplot(2,3,3);
+    else
+        ax3 = subplot(1,3,3);
+        axis square
+    end
     
-    ax3 = subplot(2,3,3);
+    
     contourf(y,x,squeeze(f_nD(sz,:,:))');
     title('2D slice through 3D numeric');
     
-    if ~isempty(solutions)
+    if ~isempty(solutions) && plot_analytic
         ax3 = subplot(2,3,6);
         contourf(y,x,squeeze(f_nD_analytic(sz,:,:))');
         title('2D slice through 3D analytic');
