@@ -461,7 +461,8 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
     {
       first_time = false;
 
-      build_system_matrix(pde, table, A, grid);
+      build_system_matrix(pde, table, A, grid, program_opts.use_imex_stepping,
+                          imex_flag::imex_implicit);
       // AA = I - dt*A;
       fm::scal(-dt, A);
       if (grid.row_start == grid.col_start)
@@ -485,7 +486,6 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
     }
 
     A.clear_and_resize(A_local_rows, A_local_cols);
-    rebuild_system_matrix();
   }
 
   // Explicit step (f_2s)
@@ -542,8 +542,12 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
   // Update coeffs
   generate_all_coefficients<P>(pde, transformer);
 
+  // Rebuild system matrix using new coefficients
+  first_time = true;
+  rebuild_system_matrix();
+
   // f2 now
-  P const tolerance  = std::is_same_v<float, P> ? 1e-6 : 1e-12;
+  P const tolerance  = std::is_same_v<float, P> ? 1e-6 : 1e-8;
   int const restart  = A.ncols();
   int const max_iter = A.ncols();
   fk::vector<P> f_2(x.size());
@@ -613,6 +617,10 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
 
   // Update coeffs
   generate_all_coefficients<P>(pde, transformer);
+
+  // Rebuild system matrix using new coefficients
+  first_time = true;
+  rebuild_system_matrix();
 
   // Final stage f3
   fk::vector<P> f_3(x.size());
