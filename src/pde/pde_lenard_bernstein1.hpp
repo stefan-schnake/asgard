@@ -84,7 +84,7 @@ private:
   static P g1(P const x, P const time)
   {
     ignore(time);
-    ignore(x)
+    ignore(x);
     return -u;
   }
 
@@ -104,7 +104,7 @@ private:
    static P g2(P const x, P const time)
   {
     ignore(time);
-    ignore(x)
+    ignore(x);
     return std::sqrt(th*nu);
   }
 
@@ -136,5 +136,10 @@ private:
     /* return dx; this will be scaled by CFL from command line */
     return std::pow(0.25, dim.get_level());
   }
+
+  inline static std::vector<source<P>> const sources_ = {};
+  inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {};
+  inline static scalar_func<P> const exact_scalar_func_ = {};
+
 };
 } // namespace asgard

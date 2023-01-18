@@ -58,6 +58,7 @@ private:
   static fk::vector<P>
   initial_condition_dim0(fk::vector<P> const x, P const t = 0)
   {
+    ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
                    [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
@@ -66,6 +67,7 @@ private:
   static fk::vector<P>
   initial_condition_dim1(fk::vector<P> const x, P const t = 0)
   {
+    ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
                    [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
@@ -74,6 +76,7 @@ private:
   static fk::vector<P>
   initial_condition_dim2(fk::vector<P> const x, P const t = 0)
   {
+    ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
                    [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
@@ -189,7 +192,7 @@ private:
       homogeneity::homogeneous, homogeneity::homogeneous);
   inline static term<P> const term_dvvf_ = term<P>(false, // time-dependent
                                                     "d_v(vf)", // name
-                                                    {partial_term_t0_d0});  
+                                                    {partial_term_dvvf_});  
 
   /*  div(vf)  */                                         
 
@@ -301,7 +304,11 @@ private:
 
   // Collect terms
   inline static term_set<P> const terms_ = {terms0_, terms1_, terms2_,
-                                            terms3_, terms4_, terms5_
+                                            terms3_, terms4_, terms5_,
                                             terms6_, terms7_, terms8_};
+
+  inline static std::vector<source<P>> const sources_ = {};
+  inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {};
+  inline static scalar_func<P> const exact_scalar_func_ = {};                                       
 };
 } // namespace asgard

@@ -29,6 +29,8 @@
 #include "pde/pde_fokkerplanck2_complete.hpp"
 #include "pde/pde_vlasov_lb_full_f.hpp"
 #include "pde/pde_pitch_angle_1x_2v.hpp"
+#include "pde/pde_lenard_bernstein1.hpp"
+#include "pde/pde_lenard_bernstein3.hpp"
 #include "tensors.hpp"
 
 namespace asgard
@@ -96,6 +98,10 @@ std::unique_ptr<PDE<P>> make_PDE(parser const &cli_input)
     return std::make_unique<PDE_vlasov_lb<P>>(cli_input);
   case PDE_opts::pitch_angle_1x_2v:
     return std::make_unique<PDE_pitch_angle_1x_2v<P>>(cli_input);
+  case PDE_opts::lenard_bernstein_1:
+    return std::make_unique<PDE_lenard_bernstein_1d<P>>(cli_input);
+  case PDE_opts::lenard_bernstein_3:
+    return std::make_unique<PDE_lenard_bernstein_3d<P>>(cli_input);
   default:
     std::cout << "Invalid pde choice" << std::endl;
     exit(-1);
@@ -184,6 +190,12 @@ make_PDE(PDE_opts const pde_choice, int const level = parser::NO_USER_VALUE,
       return fk::vector<int>(std::vector<int>(2, level));
 
     case PDE_opts::pitch_angle_1x_2v:
+      return fk::vector<int>(std::vector<int>(3, level));
+
+    case PDE_opts::lenard_bernstein_1:
+      return fk::vector<int>(std::vector<int>(1, level));
+
+    case PDE_opts::lenard_bernstein_3:
       return fk::vector<int>(std::vector<int>(3, level));
 
     default:
