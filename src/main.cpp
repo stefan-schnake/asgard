@@ -248,7 +248,7 @@ int main(int argc, char **argv)
   {
     // take a time advance step
     auto const time          = (i + 1) * pde->get_dt();
-    auto const update_system = i == 0;
+    auto const update_system = true;
     auto const method =
         opts.use_implicit_stepping
             ? asgard::time_advance::method::imp
@@ -265,13 +265,6 @@ int main(int argc, char **argv)
         default_workspace_MB, update_system);
     f_val.resize(sol.size()) = sol;
     asgard::tools::timer.stop(time_id);
-
-    // print distance away from IC
-    asgard::fm::copy(IC,ICdiff);
-    asgard::fm::axpy(f_val,ICdiff,-1.0);
-    prec dist = asgard::fm::nrm2(ICdiff);
-    std::cout << "Difference from IC:" << dist << "\n";
-
 
     // print root mean squared error from analytic solution
     if (pde->has_analytic_soln)
@@ -364,6 +357,8 @@ int main(int argc, char **argv)
       ml_plot.plot_fval(*pde, adaptive_grid.get_table(), real_space,
                         analytic_solution_realspace);
 
+      ml_plot.set_var("f_val_real" + std::to_string(i), ml_plot.create_array({1, (unsigned long)real_space.size()}, real_space));                        
+
       // only plot pde params if the pde has them
       if (asgard::parameter_manager<prec>::get_instance().get_num_parameters() >
           0)
@@ -417,6 +412,19 @@ int main(int argc, char **argv)
       f_val, adaptive_grid.get_distrib_plan(), my_rank, segment_size);
 
   asgard::node_out() << asgard::tools::timer.report() << '\n';
+  // Print out individual times for implicit runs (debugging purposes)
+  if (opts.use_implicit_stepping)
+  {
+    auto const times = asgard::tools::timer.get_times("implicit_time_advance");
+    asgard::node_out() << "Implicit solver times: ";
+    for(unsigned long ii=0; ii < times.size(); ++ii){
+      asgard::node_out() << times[ii];
+      if (ii < times.size()-1){
+        asgard::node_out() << ", ";
+      }
+    }
+    asgard::node_out() << '\n';
+  }
 
   asgard::finalize_distribution();
 

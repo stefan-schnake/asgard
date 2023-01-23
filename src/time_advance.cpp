@@ -325,16 +325,19 @@ implicit_advance(PDE<P> const &pde,
   {
     first_time = false;
 
-    A.clear_and_resize(A_local_rows, A_local_cols);
-    build_system_matrix(pde, table, A, grid);
-
-    // AA = I - dt*A;
-    fm::scal(-dt, A);
-    if (grid.row_start == grid.col_start)
+    if (solver != solve_opts::gmres)
     {
-      for (int i = 0; i < A.nrows(); ++i)
+      A.clear_and_resize(A_local_rows, A_local_cols);
+      build_system_matrix(pde, table, A, grid);
+
+      // AA = I - dt*A;
+      fm::scal(-dt, A);
+      if (grid.row_start == grid.col_start)
       {
-        A(i, i) += 1.0;
+        for (int i = 0; i < A.nrows(); ++i)
+        {
+          A(i, i) += 1.0;
+        }
       }
     }
     int ipiv_size{0};
@@ -393,12 +396,14 @@ implicit_advance(PDE<P> const &pde,
   }
   else if (solver == solve_opts::gmres)
   {
-    P const tolerance  = std::is_same_v<float, P> ? 1e-6 : 1e-12;
-    int const restart  = A.ncols();
-    int const max_iter = A.ncols();
+    P const tolerance  = std::is_same_v<float, P> ? 1e-3 : 1e-8;
+    int const restart  = A_local_cols;
+    int const max_iter = A_local_cols;
     fk::vector<P> fx(x.size());
+    tools::timer.start("gmres_iteration");
     solver::simple_gmres(pde, table, program_opts, grid, workspace_size_MB, fx,
                          x, fk::matrix<P>(), restart, max_iter, tolerance);
+    tools::timer.stop("gmres_iteration");
     return fx;
   }
   return x;

@@ -61,7 +61,8 @@ private:
     ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
-                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+//                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+                   [](P const &x_v) { ignore(x_v); return 1.0/12.0; });
     return fx;
   }
   static fk::vector<P>
@@ -70,7 +71,8 @@ private:
     ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
-                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+//                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+                   [](P const &x_v) { ignore(x_v); return 1.0/12.0; });
     return fx;
   }
   static fk::vector<P>
@@ -79,7 +81,8 @@ private:
     ignore(t);
     fk::vector<P> fx(x.size());
     std::transform(x.begin(), x.end(), fx.begin(),
-                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+//                   [](P const &x_v) { return std::exp(-x_v*x_v/(2.0*th)); });
+                   [](P const &x_v) { ignore(x_v); return 1.0/12.0; });
     return fx;
   }
 
