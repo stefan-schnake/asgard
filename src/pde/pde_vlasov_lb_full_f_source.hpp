@@ -16,18 +16,22 @@ namespace asgard
 //  BC in v is all inflow in advection for v and Neumann for diffusion in v
 
 template<typename P>
-class PDE_vlasov_lb : public PDE<P>
+class PDE_vlasov_lb_source : public PDE<P>
 {
 public:
-  PDE_vlasov_lb(parser const &cli_input)
+  PDE_vlasov_lb_source(parser const &cli_input)
       : PDE<P>(cli_input, num_dims_, num_sources_, num_terms_, dimensions_,
                terms_, sources_, exact_vector_funcs_, exact_scalar_func_,
                get_dt_, do_poisson_solve_, has_analytic_soln_, moments_)
-  {}
+  {
+    param_manager.add_parameter(parameter<P>{"n", n});
+    param_manager.add_parameter(parameter<P>{"u", u});
+    param_manager.add_parameter(parameter<P>{"theta", theta});
+  }
 
 private:
   static int constexpr num_dims_           = 2;
-  static int constexpr num_sources_        = 0;
+  static int constexpr num_sources_        = 12;
   static int constexpr num_terms_          = 5;
   static bool constexpr do_poisson_solve_  = false;
   static bool constexpr has_analytic_soln_ = true;
@@ -149,13 +153,13 @@ private:
 
   static P Mxwl_(P const x, P const t = 0)
   {
-    ignore(t)
+    ignore(t);
     return 1/std::sqrt(M_PI)*std::exp(-std::pow(x-1.0,2));
 
   }
-  onepv2_(P const x, P const t = 0)
+  static P onepv2_(P const x, P const t = 0)
   {
-    ignore(t)
+    ignore(t);
     return 1.0+x*x;
   }
 
@@ -183,11 +187,11 @@ private:
   /* Define the dimension */
   inline static dimension<P> const dim_0 = dimension<P>(
       -1.0, 1.0, 4, default_degree,
-      {initial_condition_dim_x_0, initial_condition_dim_x_1}, dV, "x");
+      {soln_dim_x_0, soln_dim_x_1}, dV, "x");
 
   inline static dimension<P> const dim_1 = dimension<P>(
       -6.0, 6.0, 3, default_degree,
-      {initial_condition_dim_v_0, initial_condition_dim_v_1}, dV, "v");
+      {soln_dim_v_0, soln_dim_v_1}, dV, "v");
 
   inline static std::vector<dimension<P>> const dimensions_ = {dim_0, dim_1};
 
@@ -230,18 +234,15 @@ private:
   /* Construct (n, u, theta) */
   static P n(P const &x, P const t = 0)
   {
-    ignore(t);
-    return alpha_(x,0.0) + (5.0/2.0)*beta_(x,0.0);
+    return alpha_(x,t) + (5.0/2.0)*beta_(x,t);
   }
   static P u(P const &x, P const t = 0)
   {
-    ignore(t);
-    return -alpha(x,0.0) + (7.0/2.0)*beta(x,0.0);
+    return (-alpha_(x,t) + (7.0/2.0)*beta_(x,t))/n(x,t);
   }
   static P theta(P const &x, P const t = 0)
   {
-    ignore(t);
-    return (1.0/2.0)*alpha(x,0.0) + (25.0/4.0)*beta(x,0.0);
+    return ((1.0/2.0)*alpha_(x,t) + (25.0/4.0)*beta_(x,t))/n(x,t) - std::pow(u(x,t),2);
   }
 
   /* build the terms */
@@ -458,22 +459,31 @@ private:
   inline static term_set<P> const terms_ = {terms_1, terms_2, terms_3, terms_4,
                                             terms_5};
 
-  inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {};
-  inline static scalar_func<P> const exact_scalar_func_               = {};
+  //////////////////////////////////////////////////////////////////
+  // Solution
+  ////////////////////////////////////////////////////////////////// 
+                                     
+  inline static md_func_type<P> soln_0 = {soln_dim_x_0,soln_dim_v_0};
+  inline static md_func_type<P> soln_1 = {soln_dim_x_1,soln_dim_v_1};
+
+  static P exact_time(P const time) { ignore(time); return 1.0; }
+
+  inline static std::vector<md_func_type<P>> const exact_vector_funcs_ = {soln_0,soln_1};
+  inline static scalar_func<P> const exact_scalar_func_               = {exact_time};
 
   //////////////////////////////////////////////////////////////////
   // Sources
   //////////////////////////////////////////////////////////////////
 
-  static P source_time(P const time) { ingore(time); return 1.0; }
+  static P sc_time(P const time) { ignore(time); return 1.0; }
 
-  // -d_tf
+  // d_tf
   static fk::vector<P> source_dim_x_0(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -dt_alpha_(x[i],t);
+      fx[i] = dt_alpha_(x[i],t);
     }
     return fx;
   }
@@ -491,7 +501,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -dt_beta_(x[i],t);
+      fx[i] = dt_beta_(x[i],t);
     }
     return fx;
   }
@@ -505,13 +515,13 @@ private:
     return fx;
   }
 
-  // -vd_xf
+  // vd_xf
   static fk::vector<P> source_dim_x_2(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -dx_alpha_(x[i],t);
+      fx[i] = dx_alpha_(x[i],t);
     }
     return fx;
   }
@@ -529,7 +539,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -dx_beta_(x[i],t);
+      fx[i] = dx_beta_(x[i],t);
     }
     return fx;
   }
@@ -543,6 +553,175 @@ private:
     return fx;
   }
 
+  // -f
+  static fk::vector<P> source_dim_x_4(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -alpha_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_4(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_x_5(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -beta_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_5(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = onepv2_(x[i],t)*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+
+  // -v*d_vf
+  static fk::vector<P> source_dim_x_6(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -alpha_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_6(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -2*x[i]*(x[i]-1.0)*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_x_7(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -beta_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_7(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = (2.0*x[i]-2.0*(1.0+x[i]*x[i])*(x[i]-1.0))*x[i]*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+
+  // u*d_vf
+  static fk::vector<P> source_dim_x_8(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = alpha_(x[i],t)*u(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_8(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -2.0*(x[i]-1.0)*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_x_9(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = beta_(x[i],t)*u(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_9(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = (2.0*x[i]-2.0*(1.0+x[i]*x[i])*(x[i]-1.0))*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+
+  // -theta*d_vvf
+  static fk::vector<P> source_dim_x_10(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -alpha_(x[i],t)*theta(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_10(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = (-2.0+4.0*std::pow(x[i]-1.0,2))*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_x_11(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = -beta_(x[i],t)*theta(x[i],t);
+    }
+    return fx;
+  }
+  static fk::vector<P> source_dim_v_11(fk::vector<P> const x, P const t = 0)
+  {
+    fk::vector<P> fx(x.size());
+    for (int i=0; i < x.size(); i++)
+    {
+      fx[i] = (2.0-8.0*x[i]*(x[i]-1.0)-2*onepv2_(x[i])+4*onepv2_(x[i])*std::pow(x[i]-1.0,2))*Mxwl_(x[i],t);
+    }
+    return fx;
+  }
+
+inline static source<P> const source0_  = source<P>({source_dim_x_0 , source_dim_v_0 }, sc_time);
+inline static source<P> const source1_  = source<P>({source_dim_x_1 , source_dim_v_1 }, sc_time);
+inline static source<P> const source2_  = source<P>({source_dim_x_2 , source_dim_v_2 }, sc_time);
+inline static source<P> const source3_  = source<P>({source_dim_x_3 , source_dim_v_3 }, sc_time);
+inline static source<P> const source4_  = source<P>({source_dim_x_4 , source_dim_v_4 }, sc_time);
+inline static source<P> const source5_  = source<P>({source_dim_x_5 , source_dim_v_5 }, sc_time);
+inline static source<P> const source6_  = source<P>({source_dim_x_6 , source_dim_v_6 }, sc_time);
+inline static source<P> const source7_  = source<P>({source_dim_x_7 , source_dim_v_7 }, sc_time);
+inline static source<P> const source8_  = source<P>({source_dim_x_8 , source_dim_v_8 }, sc_time);
+inline static source<P> const source9_  = source<P>({source_dim_x_9 , source_dim_v_9 }, sc_time);
+inline static source<P> const source10_ = source<P>({source_dim_x_10, source_dim_v_10}, sc_time);
+inline static source<P> const source11_ = source<P>({source_dim_x_11, source_dim_v_11}, sc_time);
+
+inline static std::vector<source<P>> const sources_ = { source0_, source1_, source2_, source3_,
+                                                        source4_, source5_, source6_, source7_,
+                                                        source8_, source9_,source10_,source11_ };
+
   static P get_dt_(dimension<P> const &dim)
   {
     ignore(dim);
@@ -555,8 +734,6 @@ private:
     return (6.0 - (-6.0)) / std::pow(2, 3);
   }
 
-  /* problem contains no sources */
-  inline static std::vector<source<P>> const sources_ = {};
 };
 
 } // namespace asgard
