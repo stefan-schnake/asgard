@@ -11,6 +11,7 @@
 #include <typeinfo>
 #include <vector>
 
+#include "../asgard_dimension.hpp"
 #include "../fast_math.hpp"
 #include "../matlab_utilities.hpp"
 #include "../moment.hpp"
@@ -27,20 +28,6 @@ namespace asgard
 // FIXME we plan a major rework of this component in the future
 // for RAII compliance and readability
 
-// same pi used by matlab
-static constexpr double const PI = 3.141592653589793;
-
-// for passing around vector/scalar-valued functions used by the PDE
-template<typename P>
-using vector_func = std::function<fk::vector<P>(fk::vector<P> const, P const)>;
-template<typename P>
-using scalar_func = std::function<P(P const)>;
-
-template<typename P>
-using g_func_type = std::function<P(P const, P const)>;
-
-template<typename P>
-using md_func_type = std::vector<vector_func<P>>;
 //----------------------------------------------------------------------------
 //
 // Define member classes of the PDE type: dimension, term, source
@@ -80,67 +67,6 @@ class PDE;
 template<typename P>
 class moment;
 
-template<typename P>
-class dimension
-{
-public:
-  P const domain_min;
-  P const domain_max;
-  std::vector<vector_func<P>> const initial_condition;
-  g_func_type<P> const volume_jacobian_dV;
-  std::string const name;
-  dimension(P const d_min, P const d_max, int const level, int const degree,
-            vector_func<P> const initial_condition_in,
-            g_func_type<P> const volume_jacobian_dV_in,
-            std::string const name_in)
-
-      : dimension(d_min, d_max, level, degree,
-                  std::vector<vector_func<P>>({initial_condition_in}),
-                  volume_jacobian_dV_in, name_in)
-  {}
-
-  dimension(P const d_min, P const d_max, int const level, int const degree,
-            std::vector<vector_func<P>> const initial_condition_in,
-            g_func_type<P> const volume_jacobian_dV_in,
-            std::string const name_in)
-
-      : domain_min(d_min), domain_max(d_max),
-        initial_condition(std::move(initial_condition_in)),
-        volume_jacobian_dV(volume_jacobian_dV_in), name(name_in)
-  {
-    set_level(level);
-    set_degree(degree);
-  }
-
-  int get_level() const { return level_; }
-  int get_degree() const { return degree_; }
-  fk::matrix<P> const &get_mass_matrix() const { return mass_; }
-
-private:
-  void set_level(int const level)
-  {
-    expect(level >= 0);
-    level_ = level;
-  }
-
-  void set_degree(int const degree)
-  {
-    expect(degree > 0);
-    degree_ = degree;
-  }
-
-  void set_mass_matrix(fk::matrix<P> const &new_mass)
-  {
-    this->mass_.clear_and_resize(new_mass.nrows(), new_mass.ncols()) = new_mass;
-  }
-
-  int level_;
-  int degree_;
-  fk::matrix<P> mass_;
-
-  friend class PDE<P>;
-};
-
 enum class coefficient_type
 {
   grad,
@@ -155,6 +81,13 @@ enum class flux_type
   central       = 0,
   upwind        = 1,
   lax_friedrich = 0
+};
+
+enum class imex_flag
+{
+  unspecified,
+  imex_explicit,
+  imex_implicit,
 };
 
 // ---------------------------------------------------------------------------
@@ -327,10 +260,10 @@ class term
 
 public:
   term(bool const time_dependent_in, std::string const name_in,
-       std::initializer_list<partial_term<P>> const partial_terms)
-      : time_dependent(time_dependent_in), name(name_in),
+       std::initializer_list<partial_term<P>> const partial_terms,
+       imex_flag const flag_in = imex_flag::unspecified)
+      : time_dependent(time_dependent_in), name(name_in), flag(flag_in),
         partial_terms_(partial_terms)
-
   {}
 
   void set_coefficients(fk::matrix<P> const &new_coefficients)
@@ -405,6 +338,8 @@ public:
   bool const time_dependent;
   std::string const name;
 
+  imex_flag const flag;
+
 private:
   std::vector<partial_term<P>> partial_terms_;
 
@@ -434,6 +369,73 @@ public:
   scalar_func<P> const time_func;
 };
 
+template<typename P>
+struct parameter
+{
+  std::string const name;
+  g_func_type<P> value;
+};
+
+// Singleton class for storing and receiving PDE parameters
+template<typename P>
+#define param_manager parameter_manager<P>::get_instance()
+class parameter_manager
+{
+public:
+  static parameter_manager<P> &get_instance()
+  {
+    static parameter_manager<P> instance;
+    return instance;
+  }
+
+  // prevent potential copies from being created
+  parameter_manager(parameter_manager<P> const &) = delete;
+  void operator=(parameter_manager<P> const &) = delete;
+
+  std::shared_ptr<parameter<P>> get_parameter(std::string const name)
+  {
+    auto p = check_param(name);
+    if (p == nullptr)
+    {
+      throw std::runtime_error(
+          std::string(" could not find parameter with name '" + name + "'\n"));
+    }
+    return p;
+  }
+
+  void add_parameter(parameter<P> const &param)
+  {
+    if (check_param(param.name) == nullptr)
+    {
+      parameters.push_back(std::make_shared<parameter<P>>(param));
+    }
+    else
+    {
+      throw std::runtime_error(std::string(
+          "already have a parameter with name '" + param.name + "'\n"));
+    }
+  }
+
+  size_t get_num_parameters() { return parameters.size(); }
+
+private:
+  parameter_manager() {}
+
+  std::shared_ptr<parameter<P>> check_param(std::string const name)
+  {
+    for (auto p : parameters)
+    {
+      if (p->name == name)
+      {
+        return p;
+      }
+    }
+    return nullptr;
+  }
+
+  std::vector<std::shared_ptr<parameter<P>>> parameters;
+};
+
 // ---------------------------------------------------------------------------
 //
 // abstract base class defining interface for PDEs
@@ -449,15 +451,15 @@ class PDE
 {
 public:
   PDE(parser const &cli_input, int const num_dims_in, int const num_sources_in,
-      int const num_terms_in, std::vector<dimension<P>> const dimensions,
+      int const max_num_terms, std::vector<dimension<P>> const dimensions,
       term_set<P> const terms, std::vector<source<P>> const sources_in,
-      std::vector<vector_func<P>> const exact_vector_funcs_in,
+      std::vector<md_func_type<P>> const exact_vector_funcs_in,
       scalar_func<P> const exact_time_in, dt_func<P> const get_dt,
       bool const do_poisson_solve_in          = false,
       bool const has_analytic_soln_in         = false,
       std::vector<moment<P>> const moments_in = {})
       : num_dims(num_dims_in), num_sources(num_sources_in),
-        num_terms(get_num_terms(cli_input, num_terms_in)),
+        num_terms(get_num_terms(cli_input, max_num_terms)),
         max_level(get_max_level(cli_input, dimensions)), sources(sources_in),
         exact_vector_funcs(exact_vector_funcs_in), moments(moments_in),
         exact_time(exact_time_in), do_poisson_solve(do_poisson_solve_in),
@@ -469,13 +471,17 @@ public:
     expect(num_terms > 0);
 
     expect(dimensions.size() == static_cast<unsigned>(num_dims));
-    expect(terms.size() == static_cast<unsigned>(num_terms));
+    expect(terms.size() == static_cast<unsigned>(max_num_terms));
     expect(sources.size() == static_cast<unsigned>(num_sources));
 
     // ensure analytic solution functions were provided if this flag is set
     if (has_analytic_soln)
     {
-      expect(exact_vector_funcs.size() == static_cast<unsigned>(num_dims));
+      // each set of analytical solution functions must have num_dim functions
+      for (const auto &md_func : exact_vector_funcs)
+      {
+        expect(md_func.size() == static_cast<unsigned>(num_dims));
+      }
     }
 
     // modify for appropriate level/degree
@@ -502,7 +508,7 @@ public:
     if (num_active_terms != 0)
     {
       auto const active_terms = cli_input.get_active_terms();
-      for (auto i = num_terms - 1; i >= 0; --i)
+      for (auto i = max_num_terms - 1; i >= 0; --i)
       {
         if (active_terms(i) == 0)
         {
@@ -598,7 +604,30 @@ public:
         expect(md_func.size() == static_cast<unsigned>(num_dims) + 1);
       }
     }
+
+    if (cli_input.using_imex() && moments.size() == 0)
+    {
+      throw std::runtime_error(
+          "Invalid PDE choice for IMEX time advance. PDE must have "
+          "moments defined to use -x\n");
+    }
   }
+
+  constexpr static int extract_dim0 = 1;
+  // copy constructor to create a 1D version of the PDE
+  // this is used in the IMEX time advance to help define 1D mapping from
+  // wavelet to realspace
+  // TODO: there is likely a better way to do this. Another option is to flatten
+  // element table to 1D (see hash_table_2D_to_1D.m)
+  PDE(const PDE &pde, int)
+      : num_dims(1), num_sources(pde.sources.size()),
+        num_terms(pde.get_terms().size()), max_level(pde.max_level),
+        sources(pde.sources), exact_vector_funcs(pde.exact_vector_funcs),
+        moments(pde.moments), exact_time(pde.exact_time),
+        do_poisson_solve(pde.do_poisson_solve),
+        has_analytic_soln(pde.has_analytic_soln),
+        dimensions_({pde.get_dimensions()[0]}), terms_(pde.get_terms())
+  {}
 
   // public but const data.
   int const num_dims;
@@ -607,8 +636,8 @@ public:
   int const max_level;
 
   std::vector<source<P>> const sources;
-  std::vector<vector_func<P>> const exact_vector_funcs;
-  std::vector<moment<P>> const moments;
+  std::vector<md_func_type<P>> const exact_vector_funcs;
+  std::vector<moment<P>> moments;
   scalar_func<P> const exact_time;
   bool const do_poisson_solve;
   bool const has_analytic_soln;
@@ -619,8 +648,10 @@ public:
   {
     return dimensions_;
   }
+  std::vector<dimension<P>> &get_dimensions() { return dimensions_; }
 
   term_set<P> const &get_terms() const { return terms_; }
+  term_set<P> &get_terms() { return terms_; }
 
   fk::matrix<P, mem_type::owner, resource::device> const &
   get_coefficients(int const term, int const dim) const
@@ -711,7 +742,7 @@ public:
   }
 
 private:
-  int get_num_terms(parser const &cli_input, int const num_terms_in) const
+  int get_num_terms(parser const &cli_input, int const max_num_terms) const
   {
     // returns either the number of terms set in the PDE specification, or the
     // number of terms toggled on by the user
@@ -719,25 +750,25 @@ private:
 
     // verify that the CLI input matches the spec before altering the num_terms
     // we have
-    if (num_active_terms != 0 && num_active_terms != num_terms_in)
+    if (num_active_terms != 0 && num_active_terms != max_num_terms)
     {
-      std::cerr << "failed to parse dimension-many active terms - parsed "
-                << num_active_terms << " terms, expected " << num_terms << "\n";
-      exit(1);
+      throw std::runtime_error(
+          std::string("failed to parse dimension-many active terms - parsed ") +
+          std::to_string(num_active_terms) + " terms, expected " +
+          std::to_string(max_num_terms));
     }
-    if (num_active_terms == num_terms_in)
+    // if nothing specified in the cli, use the default max_num_terms
+    if (num_active_terms == 0)
+      return max_num_terms;
+    // terms specified in the cli, parse the new number of terms
+    auto const active_terms = cli_input.get_active_terms();
+    int new_num_terms =
+        std::accumulate(active_terms.begin(), active_terms.end(), 0);
+    if (new_num_terms == 0)
     {
-      auto const active_terms = cli_input.get_active_terms();
-      int new_num_terms =
-          std::accumulate(active_terms.begin(), active_terms.end(), 0);
-      if (new_num_terms == 0)
-      {
-        std::cerr << "must have at least one term enabled\n";
-        exit(1);
-      }
-      return new_num_terms;
+      throw std::runtime_error("must have at least one term enabled");
     }
-    return num_terms_in;
+    return new_num_terms;
   }
 
   int get_max_level(parser const &cli_input,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "adapt.hpp"
+#include "asgard_dimension.hpp"
 #include "basis.hpp"
 #include "distribution.hpp"
 #include "elements.hpp"
@@ -27,11 +29,40 @@ std::vector<fk::matrix<P>> gen_realspace_transform(
     basis::wavelet_transform<P, resource::host> const &transformer);
 
 template<typename P>
+fk::vector<P> gen_realspace_nodes(int const degree, int const level,
+                                  P const min, P const max);
+
+template<typename P>
+std::vector<fk::matrix<P>> gen_realspace_transform(
+    std::vector<dimension<P>> const &pde,
+    basis::wavelet_transform<P, resource::host> const &transformer);
+
+template<typename P>
+std::vector<fk::matrix<P>> gen_realspace_transform(
+    std::vector<dimension_description<P>> const &pde,
+    basis::wavelet_transform<P, resource::host> const &transformer);
+
+template<typename P>
 void wavelet_to_realspace(
     PDE<P> const &pde, fk::vector<P> const &wave_space,
     elements::table const &table,
     basis::wavelet_transform<P, resource::host> const &transformer,
-    int const memory_limit_MB,
+    std::array<fk::vector<P, mem_type::view, resource::host>, 2> &workspace,
+    fk::vector<P> &real_space);
+
+template<typename P>
+void wavelet_to_realspace(
+    std::vector<dimension<P>> const &pde, fk::vector<P> const &wave_space,
+    elements::table const &table,
+    basis::wavelet_transform<P, resource::host> const &transformer,
+    std::array<fk::vector<P, mem_type::view, resource::host>, 2> &workspace,
+    fk::vector<P> &real_space);
+
+template<typename P>
+void wavelet_to_realspace(
+    std::vector<dimension_description<P>> const &pde,
+    fk::vector<P> const &wave_space, elements::table const &table,
+    basis::wavelet_transform<P, resource::host> const &transformer,
     std::array<fk::vector<P, mem_type::view, resource::host>, 2> &workspace,
     fk::vector<P> &real_space);
 
@@ -41,6 +72,13 @@ template<typename P>
 fk::vector<P>
 combine_dimensions(int const, elements::table const &, int const, int const,
                    std::vector<fk::vector<P>> const &, P const = 1.0);
+
+template<typename P>
+void combine_dimensions(int const degree, elements::table const &table,
+                        int const start_element, int const stop_element,
+                        std::vector<fk::vector<P>> const &vectors,
+                        P const time_scale,
+                        fk::vector<P, mem_type::view> result);
 
 template<typename P, typename F>
 fk::vector<P> forward_transform(
@@ -139,6 +177,14 @@ fk::vector<P> forward_transform(
 }
 
 template<typename P>
+fk::vector<P> sum_separable_funcs(
+    std::vector<md_func_type<P>> const &funcs,
+    std::vector<dimension<P>> const &dims,
+    adapt::distributed_grid<P> const &grid,
+    basis::wavelet_transform<P, resource::host> const &transformer,
+    int const degree, P const time);
+
+template<typename P>
 inline fk::vector<P> transform_and_combine_dimensions(
     PDE<P> const &pde, std::vector<vector_func<P>> const &v_functions,
     elements::table const &table,
@@ -175,17 +221,87 @@ inline fk::vector<P> transform_and_combine_dimensions(
 }
 
 template<typename P>
-inline int real_solution_size(PDE<P> const &pde)
+inline void transform_and_combine_dimensions(
+    std::vector<dimension<P>> const &dims,
+    std::vector<vector_func<P>> const &v_functions,
+    elements::table const &table,
+    basis::wavelet_transform<P, resource::host> const &transformer,
+    int const start, int const stop, int const degree, P const time,
+    P const time_multiplier, fk::vector<P, mem_type::view> result)
+
 {
-  /* determine the length of the realspace solution */
-  std::vector<dimension<P>> const &dims = pde.get_dimensions();
-  int prod                              = 1;
-  for (int i = 0; i < static_cast<int>(dims.size()); i++)
+  expect(v_functions.size() == dims.size());
+  expect(start <= stop);
+  expect(stop < table.size());
+  expect(degree >= 0);
+
+  std::vector<fk::vector<P>> dimension_components;
+  dimension_components.reserve(dims.size());
+
+  for (size_t i = 0; i < dims.size(); ++i)
   {
-    prod *= (dims[i].get_degree() * std::pow(2, dims[i].get_level()));
+    auto const &dim = dims[i];
+    dimension_components.push_back(forward_transform<P>(
+        dim, v_functions[i], dim.volume_jacobian_dV, transformer, time));
+    int const n = dimension_components.back().size();
+    std::vector<int> ipiv(n);
+    fk::matrix<P, mem_type::const_view> const lhs_mass(dim.get_mass_matrix(), 0,
+                                                       n - 1, 0, n - 1);
+    expect(lhs_mass.nrows() == n);
+    expect(lhs_mass.ncols() == n);
+    fk::matrix<P> mass_copy(lhs_mass);
+    fm::gesv(mass_copy, dimension_components.back(), ipiv);
   }
 
-  return prod;
+  combine_dimensions(degree, table, start, stop, dimension_components,
+                     time_multiplier, result);
+}
+
+template<typename P>
+inline fk::vector<P> transform_and_combine_dimensions(
+    std::vector<dimension<P>> const &dims,
+    std::vector<vector_func<P>> const &v_functions,
+    elements::table const &table,
+    basis::wavelet_transform<P, resource::host> const &transformer,
+    int const start, int const stop, int const degree, P const time = 0.0,
+    P const time_multiplier = 1.0)
+{
+  int64_t const vector_size =
+      (stop - start + 1) * std::pow(degree, dims.size());
+  expect(vector_size < INT_MAX);
+  fk::vector<P> result(vector_size);
+  transform_and_combine_dimensions(dims, v_functions, table, transformer, start,
+                                   stop, degree, time, time_multiplier,
+                                   fk::vector<P, mem_type::view>(result));
+  return result;
+}
+
+template<typename P>
+inline int dense_space_size(PDE<P> const &pde)
+{
+  return dense_space_size(pde.get_dimensions());
+}
+
+template<typename precision>
+inline int dense_space_size(std::vector<dimension<precision>> const &dims)
+{
+  /* determine the length of the realspace solution */
+  return std::accumulate(dims.cbegin(), dims.cend(), int{1},
+                         [](int const size, dimension<precision> const &dim) {
+                           return size * dim.get_degree() *
+                                  fm::two_raised_to(dim.get_level());
+                         });
+}
+
+template<typename precision>
+inline int
+dense_space_size(std::vector<dimension_description<precision>> const &dims)
+{
+  return std::accumulate(
+      dims.cbegin(), dims.cend(), int{1},
+      [](int const size, dimension_description<precision> const &dim) {
+        return size * dim.degree * fm::two_raised_to(dim.level);
+      });
 }
 
 template<typename P>

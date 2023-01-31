@@ -32,14 +32,30 @@ TEST_CASE("parser constructor/getters", "[program_options]")
     int const realspace            = 1;
     double const cfl               = 2.0;
     double const thresh            = 0.1;
+    int const memory               = 4000;
 
     // set up test inputs directly from golden values
     std::cerr.setstate(std::ios_base::failbit);
-    parser const p = make_parser(
-        {"-p", pde_choice, "-l", input_levels, "-d", std::to_string(degree),
-         "-w", std::to_string(write), "-r", std::to_string(realspace), "-f",
-         "-i", "-e", "-c", std::to_string(cfl), "--adapt", "--thresh",
-         std::to_string(thresh)});
+    parser const p = make_parser({"-p",
+                                  pde_choice,
+                                  "-l",
+                                  input_levels,
+                                  "-d",
+                                  std::to_string(degree),
+                                  "-w",
+                                  std::to_string(write),
+                                  "-r",
+                                  std::to_string(realspace),
+                                  "-f",
+                                  "-i",
+                                  "-e",
+                                  "-c",
+                                  std::to_string(cfl),
+                                  "--adapt",
+                                  "--thresh",
+                                  std::to_string(thresh),
+                                  "--memory",
+                                  std::to_string(memory)});
     std::cerr.clear();
 
     REQUIRE(p.get_degree() == degree);
@@ -53,6 +69,7 @@ TEST_CASE("parser constructor/getters", "[program_options]")
     REQUIRE(p.get_adapt_thresh() == thresh);
     REQUIRE(p.get_cfl() == cfl);
     REQUIRE(p.get_selected_pde() == pde);
+    REQUIRE(p.get_memory_limit() == memory);
   }
 
   SECTION("run w/ defaults")
@@ -76,8 +93,13 @@ TEST_CASE("parser constructor/getters", "[program_options]")
 
     auto const def_solver = parser::DEFAULT_SOLVER;
 
-    auto const def_adapt     = parser::DEFAULT_DO_ADAPT;
-    auto const def_threshold = parser::DEFAULT_ADAPT_THRESH;
+    auto const def_adapt        = parser::DEFAULT_DO_ADAPT;
+    auto const def_threshold    = parser::DEFAULT_ADAPT_THRESH;
+    auto const def_memory_limit = parser::DEFAULT_MEMORY_LIMIT_MB;
+
+    auto const def_tolerance        = parser::DEFAULT_GMRES_TOLERANCE;
+    auto const def_inner_iterations = parser::DEFAULT_GMRES_INNER_ITERATIONS;
+    auto const def_outer_iterations = parser::DEFAULT_GMRES_OUTER_ITERATIONS;
 
     auto const p = make_parser({});
 
@@ -98,6 +120,10 @@ TEST_CASE("parser constructor/getters", "[program_options]")
     REQUIRE(p.get_dt() == def_dt);
     REQUIRE(p.get_adapt_thresh() == def_threshold);
     REQUIRE(p.do_adapt_levels() == def_adapt);
+    REQUIRE(p.get_memory_limit() == def_memory_limit);
+    REQUIRE(p.get_gmres_tolerance() == def_tolerance);
+    REQUIRE(p.get_gmres_inner_iterations() == def_inner_iterations);
+    REQUIRE(p.get_gmres_outer_iterations() == def_outer_iterations);
     REQUIRE(p.is_valid());
   }
 
@@ -183,6 +209,59 @@ TEST_CASE("parser constructor/getters", "[program_options]")
   {
     std::cerr.setstate(std::ios_base::failbit);
     parser const p = make_parser({"asgard", "--adapt", "--thresh=1.1"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range memory_limit - neg")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p = make_parser({"asgard", "--memory=-100"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_tolerance - direct solver")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p = make_parser({"asgard", "--solver=direct", "--tol=0.01"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_tolerance - neg")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p = make_parser({"asgard", "--solver=gmres", "--tol=-0.01"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_inner_iterations - direct solver")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p =
+        make_parser({"asgard", "--solver=direct", "--inner_it=10"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_inner_iterations - neg")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p =
+        make_parser({"asgard", "--solver=gmres", "--inner_it=-10"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_outer_iterations - direct solver")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p =
+        make_parser({"asgard", "--solver=direct", "--outer_it=10"});
+    std::cerr.clear();
+    REQUIRE(!p.is_valid());
+  }
+  SECTION("out of range gmres_outer_iterations - neg")
+  {
+    std::cerr.setstate(std::ios_base::failbit);
+    parser const p =
+        make_parser({"asgard", "--solver=gmres", "--outer_it=-10"});
     std::cerr.clear();
     REQUIRE(!p.is_valid());
   }

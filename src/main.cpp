@@ -126,52 +126,47 @@ int main(int argc, char **argv)
   asgard::node_out() << "  generating: coefficient matrices..." << '\n';
   asgard::generate_all_coefficients<prec>(*pde, transformer);
 
+  // -- initialize moments of the PDE
+  asgard::node_out() << "  generating: moment vectors..." << '\n';
+  for (auto &m : pde->moments)
+  {
+    m.createFlist(*pde, opts);
+    expect(m.get_fList().size() > 0);
+
+    m.createMomentVector(*pde, cli_input, adaptive_grid.get_table());
+    expect(m.get_vector().size() > 0);
+  }
+
   // this is to bail out for further profiling/development on the setup routines
   if (opts.num_time_steps < 1)
     return 0;
 
   asgard::node_out() << "--- begin time loop staging ---" << '\n';
 
-  // Our default device workspace size is 10GB - 12 GB DRAM on TitanV
-  // - a couple GB for allocations not currently covered by the
-  // workspace limit (including working batch).
-
-  // This limit is only for the device workspace - the portion
-  // of our allocation that will be resident on an accelerator
-  // if the code is built for that.
-  //
-  // FIXME eventually going to be settable from the cmake
-  static auto const default_workspace_MB = 10000;
-
-  // FIXME currently used to check realspace transform only
-  /* RAM on fusiont5 */
-  static auto const default_workspace_cpu_MB = 187000;
-
 // -- setup realspace transform for file io or for plotting
 #if defined(ASGARD_IO_HIGHFIVE) || defined(ASGARD_USE_MATLAB)
 
   // realspace solution vector - WARNING this is
   // currently infeasible to form for large problems
-  auto const real_space_size = asgard::real_solution_size(*pde);
-  asgard::fk::vector<prec> real_space(real_space_size);
+  auto const dense_size = asgard::dense_space_size(*pde);
+  asgard::fk::vector<prec> real_space(dense_size);
 
   // temporary workspaces for the transform
   asgard::fk::vector<prec, asgard::mem_type::owner, asgard::resource::host>
-      workspace(real_space_size * 2);
+      workspace(dense_size * 2);
   std::array<
       asgard::fk::vector<prec, asgard::mem_type::view, asgard::resource::host>,
       2>
-      tmp_workspace = {
-          asgard::fk::vector<prec, asgard::mem_type::view,
-                             asgard::resource::host>(workspace, 0,
-                                                     real_space_size - 1),
-          asgard::fk::vector<prec, asgard::mem_type::view,
-                             asgard::resource::host>(workspace, real_space_size,
-                                                     real_space_size * 2 - 1)};
+      tmp_workspace = {asgard::fk::vector<prec, asgard::mem_type::view,
+                                          asgard::resource::host>(
+                           workspace, 0, dense_size - 1),
+                       asgard::fk::vector<prec, asgard::mem_type::view,
+                                          asgard::resource::host>(
+                           workspace, dense_size, dense_size * 2 - 1)};
   // transform initial condition to realspace
-  asgard::wavelet_to_realspace<prec>(
-      *pde, initial_condition, adaptive_grid.get_table(), transformer,
-      default_workspace_cpu_MB, tmp_workspace, real_space);
+  asgard::wavelet_to_realspace<prec>(*pde, initial_condition,
+                                     adaptive_grid.get_table(), transformer,
+                                     tmp_workspace, real_space);
 #endif
 
 #ifdef ASGARD_USE_MATLAB
@@ -179,19 +174,17 @@ int main(int argc, char **argv)
   ml_plot.connect(cli_input.get_ml_session_string());
   asgard::node_out() << "  connected to MATLAB" << '\n';
 
-  asgard::fk::vector<prec> analytic_solution_realspace(real_space_size);
+  asgard::fk::vector<prec> analytic_solution_realspace(dense_size);
   if (pde->has_analytic_soln)
   {
     // generate the analytic solution at t=0
-    auto const subgrid_init = adaptive_grid.get_subgrid(asgard::get_rank());
-    auto const analytic_solution_init =
-        asgard::transform_and_combine_dimensions(
-            *pde, pde->exact_vector_funcs, adaptive_grid.get_table(),
-            transformer, subgrid_init.col_start, subgrid_init.col_stop, degree);
+    auto const analytic_solution_init = sum_separable_funcs(
+        pde->exact_vector_funcs, pde->get_dimensions(), adaptive_grid,
+        transformer, degree, static_cast<prec>(0.0));
     // transform analytic solution to realspace
     asgard::wavelet_to_realspace<prec>(
         *pde, analytic_solution_init, adaptive_grid.get_table(), transformer,
-        default_workspace_cpu_MB, tmp_workspace, analytic_solution_realspace);
+        tmp_workspace, analytic_solution_realspace);
   }
 
   // Add the matlab scripts directory to the matlab path
@@ -236,15 +229,20 @@ int main(int argc, char **argv)
     // take a time advance step
     auto const time          = (i + 1) * pde->get_dt();
     auto const update_system = i == 0;
-    auto const method        = opts.use_implicit_stepping
-                                   ? asgard::time_advance::method::imp
-                                   : asgard::time_advance::method::exp;
-    auto const time_str = opts.use_implicit_stepping ? "implicit_time_advance"
-                                                     : "explicit_time_advance";
-    auto const time_id  = asgard::tools::timer.start(time_str);
-    auto const sol      = asgard::time_advance::adaptive_advance(
+    auto const method =
+        opts.use_implicit_stepping
+            ? asgard::time_advance::method::imp
+            : (opts.use_imex_stepping ? asgard::time_advance::method::imex
+                                      : asgard::time_advance::method::exp);
+    const char *time_str =
+        opts.use_implicit_stepping
+            ? "implicit_time_advance"
+            : (opts.use_imex_stepping ? "imex_time_advance"
+                                      : "explicit_time_advance");
+    const std::string time_id = asgard::tools::timer.start(time_str);
+    auto const sol            = asgard::time_advance::adaptive_advance(
         method, *pde, adaptive_grid, transformer, opts, f_val, time,
-        default_workspace_MB, update_system);
+        update_system);
     f_val.resize(sol.size()) = sol;
     asgard::tools::timer.stop(time_id);
 
@@ -252,11 +250,9 @@ int main(int argc, char **argv)
     if (pde->has_analytic_soln)
     {
       // get analytic solution at time(step+1)
-      auto const subgrid = adaptive_grid.get_subgrid(asgard::get_rank());
-      auto const time_multiplier   = pde->exact_time(time + pde->get_dt());
-      auto const analytic_solution = transform_and_combine_dimensions(
-          *pde, pde->exact_vector_funcs, adaptive_grid.get_table(), transformer,
-          subgrid.col_start, subgrid.col_stop, degree, time, time_multiplier);
+      auto const analytic_solution = sum_separable_funcs(
+          pde->exact_vector_funcs, pde->get_dimensions(), adaptive_grid,
+          transformer, degree, time + pde->get_dt());
 
       // calculate root mean squared error
       auto const diff = f_val - analytic_solution;
@@ -286,17 +282,15 @@ int main(int argc, char **argv)
 #ifdef ASGARD_USE_MATLAB
       if (opts.should_plot(i))
       {
-        auto const real_size = asgard::real_solution_size(*pde);
-        auto transform_wksp  = asgard::update_transform_workspace<prec>(
-            real_size, workspace, tmp_workspace);
-        if (real_size > analytic_solution_realspace.size())
+        auto transform_wksp = asgard::update_transform_workspace<prec>(
+            dense_size, workspace, tmp_workspace);
+        if (dense_size > analytic_solution_realspace.size())
         {
-          analytic_solution_realspace.resize(real_size);
+          analytic_solution_realspace.resize(dense_size);
         }
         asgard::wavelet_to_realspace<prec>(
             *pde, analytic_solution, adaptive_grid.get_table(), transformer,
-            default_workspace_cpu_MB, transform_wksp,
-            analytic_solution_realspace);
+            transform_wksp, analytic_solution_realspace);
       }
 #endif
     }
@@ -309,14 +303,13 @@ int main(int argc, char **argv)
     if (opts.should_output_realspace(i) || opts.should_plot(i))
     {
       // resize transform workspaces if grid size changed due to adaptivity
-      auto const real_size = real_solution_size(*pde);
-      auto transform_wksp  = asgard::update_transform_workspace<prec>(
-          real_size, workspace, tmp_workspace);
-      real_space.resize(real_size);
+      auto transform_wksp = asgard::update_transform_workspace<prec>(
+          dense_size, workspace, tmp_workspace);
+      real_space.resize(dense_size);
 
       asgard::wavelet_to_realspace<prec>(*pde, f_val, adaptive_grid.get_table(),
-                                         transformer, default_workspace_cpu_MB,
-                                         transform_wksp, real_space);
+                                         transformer, transform_wksp,
+                                         real_space);
     }
 #endif
 
@@ -331,8 +324,6 @@ int main(int argc, char **argv)
       asgard::update_output_file(output_dataset_real, real_space,
                                  realspace_output_name);
     }
-#else
-    asgard::ignore(default_workspace_cpu_MB);
 #endif
 
 #ifdef ASGARD_USE_MATLAB
@@ -340,6 +331,44 @@ int main(int argc, char **argv)
     {
       ml_plot.plot_fval(*pde, adaptive_grid.get_table(), real_space,
                         analytic_solution_realspace);
+
+      // only plot pde params if the pde has them
+      if (asgard::parameter_manager<prec>::get_instance().get_num_parameters() >
+          0)
+      {
+        // vlasov pde params plot
+        auto dim   = pde->get_dimensions()[0];
+        auto nodes = ml_plot.generate_nodes(degree, dim.get_level(),
+                                            dim.domain_min, dim.domain_max);
+
+        // evaluates the given PDE parameter at each node
+        auto eval_over_nodes = [](std::string const name,
+                                  asgard::fk::vector<prec> const &nodes_in)
+            -> asgard::fk::vector<prec> {
+          asgard::fk::vector<prec> result(nodes_in.size());
+          using P    = prec;
+          auto param = asgard::param_manager.get_parameter(name);
+          std::transform(
+              nodes_in.begin(), nodes_in.end(), result.begin(),
+              [param](prec const &x) { return param->value(x, 0.0); });
+          return result;
+        };
+
+        asgard::fk::vector<prec> n_nodes  = eval_over_nodes("n", nodes);
+        asgard::fk::vector<prec> u_nodes  = eval_over_nodes("u", nodes);
+        asgard::fk::vector<prec> th_nodes = eval_over_nodes("theta", nodes);
+
+        // call the matlab script to plot n, u, theta
+        ml_plot.reset_params();
+        std::vector<size_t> const dim_sizes{1,
+                                            static_cast<size_t>(nodes.size())};
+        ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, nodes);
+        ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, n_nodes);
+        ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, u_nodes);
+        ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, th_nodes);
+        ml_plot.add_param(time);
+        ml_plot.call("vlasov_params");
+      }
     }
 #endif
 

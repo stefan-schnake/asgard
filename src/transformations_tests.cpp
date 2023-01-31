@@ -178,9 +178,6 @@ void test_wavelet_to_realspace(PDE<P> const &pde,
                                std::string const &gold_filename,
                                P const tol_factor)
 {
-  // memory limit for routines
-  static auto constexpr limit_MB = 4000;
-
   // FIXME assume uniform level and degree
   auto const &d     = pde.get_dimensions()[0];
   auto const level  = d.get_level();
@@ -206,18 +203,18 @@ void test_wavelet_to_realspace(PDE<P> const &pde,
     return wave_space_in;
   }();
 
-  auto const real_space_size = real_solution_size(pde);
-  fk::vector<P> real_space(real_space_size);
+  auto const dense_size = dense_space_size(pde);
+  fk::vector<P> real_space(dense_size);
 
-  fk::vector<P, mem_type::owner, resource::host> workspace_0(real_space_size);
-  fk::vector<P, mem_type::owner, resource::host> workspace_1(real_space_size);
+  fk::vector<P, mem_type::owner, resource::host> workspace_0(dense_size);
+  fk::vector<P, mem_type::owner, resource::host> workspace_1(dense_size);
 
   std::array<fk::vector<P, mem_type::view, resource::host>, 2> tmp_workspace = {
       fk::vector<P, mem_type::view, resource::host>(workspace_0),
       fk::vector<P, mem_type::view, resource::host>(workspace_1)};
 
-  wavelet_to_realspace<P>(pde, wave_space, table, transformer, limit_MB,
-                          tmp_workspace, real_space);
+  wavelet_to_realspace<P>(pde, wave_space, table, transformer, tmp_workspace,
+                          real_space);
 
   auto const gold = fk::vector<P>(read_vector_from_txt_file(gold_filename));
 
