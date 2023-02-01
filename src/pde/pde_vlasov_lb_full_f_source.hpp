@@ -37,7 +37,7 @@ private:
   static bool constexpr has_analytic_soln_ = true;
   static int constexpr default_degree      = 3;
 
-  static P constexpr nu = 1e3;
+  static P constexpr nu = 0.0;
 
   static fk::vector<P>
   initial_condition_dim_x_0(fk::vector<P> const &x, P const t = 0)
@@ -113,7 +113,7 @@ private:
 
   static P dx_alpha_(P const x, P const t = 0)
   {
-    return M_PI*std::sin(2*M_PI*x)*(0.5*std::cos(2*t)+1);
+    return M_PI*std::cos(2*M_PI*x)*(0.5*std::cos(2*t)+1);
   }
 
 
@@ -127,7 +127,7 @@ private:
   }
   static P dx_beta_(P const x, P const t = 0)
   {
-    return (-M_PI*std::cos(2*M_PI*x))*(std::sin(t)+1);
+    return (-M_PI*std::sin(2*M_PI*x))*(std::sin(t)+1);
   }
 
   static fk::vector<P>
@@ -275,11 +275,13 @@ private:
 
   inline static term<P> const term_e1x = term<P>(false,  // time-dependent
                                                  "E1_x", // name
-                                                 {e1_pterm_x});
+                                                 {e1_pterm_x},
+                                                 imex_flag::imex_explicit);
 
   inline static term<P> const term_e1v = term<P>(false,  // time-dependent
                                                  "E1_v", // name
-                                                 {e1_pterm_v});
+                                                 {e1_pterm_v},
+                                                 imex_flag::imex_explicit);
 
   inline static std::vector<term<P>> const terms_1 = {term_e1x, term_e1v};
 
@@ -311,11 +313,13 @@ private:
 
   inline static term<P> const term_e2x = term<P>(false,  // time-dependent
                                                  "E2_x", // name
-                                                 {e2_pterm_x});
+                                                 {e2_pterm_x},
+                                                 imex_flag::imex_explicit);
 
   inline static term<P> const term_e2v = term<P>(false,  // time-dependent
                                                  "E2_v", // name
-                                                 {e2_pterm_v});
+                                                 {e2_pterm_v},
+                                                 imex_flag::imex_explicit);
 
   inline static std::vector<term<P>> const terms_2 = {term_e2x, term_e2v};
 
@@ -347,11 +351,13 @@ private:
 
   inline static term<P> const term_i1x = term<P>(false,  // time-dependent
                                                  "I1_x", // name
-                                                 {i1_pterm_x});
+                                                 {i1_pterm_x},
+                                                 imex_flag::imex_implicit);
 
   inline static term<P> const term_i1v = term<P>(false,  // time-dependent
                                                  "I1_v", // name
-                                                 {i1_pterm_v});
+                                                 {i1_pterm_v},
+                                                 imex_flag::imex_implicit);
 
   inline static std::vector<term<P>> const terms_3 = {term_i1x, term_i1v};
 
@@ -382,13 +388,15 @@ private:
                       flux_type::central, boundary_condition::dirichlet,
                       boundary_condition::dirichlet);
 
-  inline static term<P> const term_i2x = term<P>(false,  // time-dependent
+  inline static term<P> const term_i2x = term<P>(true,  // time-dependent
                                                  "I2_x", // name
-                                                 {i2_pterm_x});
+                                                 {i2_pterm_x},
+                                                 imex_flag::imex_implicit);
 
   inline static term<P> const term_i2v = term<P>(false,  // time-dependent
                                                  "I2_v", // name
-                                                 {i2_pterm_v});
+                                                 {i2_pterm_v},
+                                                 imex_flag::imex_implicit);
 
   inline static std::vector<term<P>> const terms_4 = {term_i2x, term_i2v};
 
@@ -422,9 +430,10 @@ private:
       flux_type::central, boundary_condition::periodic,
       boundary_condition::periodic);
 
-  inline static term<P> const term_i3x = term<P>(false,  // time-dependent
+  inline static term<P> const term_i3x = term<P>(true,  // time-dependent
                                                  "I3_x", // name
-                                                 {i3_pterm_x1, i3_pterm_x2});
+                                                 {i3_pterm_x1, i3_pterm_x2},
+                                                 imex_flag::imex_implicit);
 
   static P i3_g3(P const x, P const time = 0)
   {
@@ -452,7 +461,8 @@ private:
 
   inline static term<P> const term_i3v = term<P>(false,  // time-dependent
                                                  "I3_v", // name
-                                                 {i3_pterm_v1, i3_pterm_v2});
+                                                 {i3_pterm_v1, i3_pterm_v2},
+                                                 imex_flag::imex_implicit);
 
   inline static std::vector<term<P>> const terms_5 = {term_i3x, term_i3v};
 
@@ -469,7 +479,7 @@ private:
   static P exact_time(P const time) { ignore(time); return 1.0; }
 
   inline static std::vector<md_func_type<P>> const exact_vector_funcs_ = {soln_0,soln_1};
-  inline static scalar_func<P> const exact_scalar_func_               = {exact_time};
+  inline static scalar_func<P> const exact_scalar_func_                = {exact_time};
 
   //////////////////////////////////////////////////////////////////
   // Sources
@@ -553,13 +563,13 @@ private:
     return fx;
   }
 
-  // -f
+  // -nu*f
   static fk::vector<P> source_dim_x_4(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -alpha_(x[i],t);
+      fx[i] = -nu*alpha_(x[i],t);
     }
     return fx;
   }
@@ -577,7 +587,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -beta_(x[i],t);
+      fx[i] = -nu*beta_(x[i],t);
     }
     return fx;
   }
@@ -591,13 +601,13 @@ private:
     return fx;
   }
 
-  // -v*d_vf
+  // -nu*v*d_vf
   static fk::vector<P> source_dim_x_6(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -alpha_(x[i],t);
+      fx[i] = -nu*alpha_(x[i],t);
     }
     return fx;
   }
@@ -615,7 +625,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -beta_(x[i],t);
+      fx[i] = -nu*beta_(x[i],t);
     }
     return fx;
   }
@@ -629,13 +639,13 @@ private:
     return fx;
   }
 
-  // u*d_vf
+  // nu*u*d_vf
   static fk::vector<P> source_dim_x_8(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = alpha_(x[i],t)*u(x[i],t);
+      fx[i] = nu*alpha_(x[i],t)*u(x[i],t);
     }
     return fx;
   }
@@ -653,7 +663,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = beta_(x[i],t)*u(x[i],t);
+      fx[i] = nu*beta_(x[i],t)*u(x[i],t);
     }
     return fx;
   }
@@ -667,13 +677,13 @@ private:
     return fx;
   }
 
-  // -theta*d_vvf
+  // -nu*theta*d_vvf
   static fk::vector<P> source_dim_x_10(fk::vector<P> const x, P const t = 0)
   {
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -alpha_(x[i],t)*theta(x[i],t);
+      fx[i] = -nu*alpha_(x[i],t)*theta(x[i],t);
     }
     return fx;
   }
@@ -691,7 +701,7 @@ private:
     fk::vector<P> fx(x.size());
     for (int i=0; i < x.size(); i++)
     {
-      fx[i] = -beta_(x[i],t)*theta(x[i],t);
+      fx[i] = -nu*beta_(x[i],t)*theta(x[i],t);
     }
     return fx;
   }

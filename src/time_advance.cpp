@@ -165,14 +165,14 @@ explicit_advance(PDE<P> const &pde,
 
   // see
   // https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#Explicit_Runge%E2%80%93Kutta_methods
-  P const a21 = 0.5;
-  P const a31 = -1.0;
-  P const a32 = 2.0;
-  P const b1  = 1.0 / 6.0;
-  P const b2  = 2.0 / 3.0;
-  P const b3  = 1.0 / 6.0;
-  P const c2  = 1.0 / 2.0;
-  P const c3  = 1.0;
+  P const a21 = 1.0;
+  P const a31 = 0.0;
+  P const a32 = 0.0;
+  P const b1  = 1.0 / 2.0;
+  P const b2  = 1.0 / 2.0;
+  P const b3  = 0.0;
+  P const c2  = 1.0;
+  P const c3  = 0.0;
 
   // FIXME eventually want to extract RK step into function
   // -- RK step 1
@@ -495,6 +495,12 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
   tools::timer.stop(apply_id);
   reduce_results(fx, reduced_fx, plan, get_rank());
 
+  if (pde.num_sources > 0)
+  {
+    auto const sources = get_sources(pde, adaptive_grid, transformer, time);
+    fm::axpy(sources, reduced_fx);
+  }
+
   fk::vector<P> f_2s(x_orig.size());
   exchange_results(reduced_fx, f_2s, elem_size, plan, get_rank());
   fm::axpy(f_2s, x, dt);
@@ -557,20 +563,35 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
   // --------------------------------
   // Third Stage
   // --------------------------------
-  fm::copy(x_orig, x); // f0
+  //fm::copy(x_orig, x); // f0
 
   fk::vector<P> f2_x(f_2);
-  fm::axpy(x, f2_x); // f0 + f2
+  //fm::axpy(x, f2_x); // f0 + f2
 
   tools::timer.start("kronmult_setup");
   fx = kronmult::execute(pde, table, program_opts, grid, workspace_size_MB,
-                         f2_x);
+                         f2_x, imex_flag::imex_explicit);
   tools::timer.stop(apply_id);
   reduce_results(fx, reduced_fx, plan, get_rank());
 
+  if (pde.num_sources > 0)
+  {
+    auto const sources = get_sources(pde, adaptive_grid, transformer, time + dt);
+    fm::axpy(sources, reduced_fx);
+  }
+
   fk::vector<P> f_3s(x_orig.size());
   exchange_results(reduced_fx, f_3s, elem_size, plan, get_rank());
-  fm::axpy(f_3s, x, static_cast<P>(0.5) * dt); // f0 + 0.5*dt*apply_A(f0+f_2)
+  fm::axpy(f_3s, f_2, dt); // f_2 <- f_2 + dt*(Af_2 + s(t+dt))
+
+  fk::vector<P> y = fk::vector<P>(x.size());
+  fm::axpy(x_orig,y,static_cast<P>(0.5));
+  fm::axpy(f_2,y,static_cast<P>(0.5));
+  
+  return y;
+  
+  fm::axpy(x_orig, f_2, static_cast<P>(0.5)*dt); // f0 + 0.5*dt*apply_A(f0+f_2)
+  
 
   tools::timer.start("kronmult_setup");
   fx = kronmult::execute(pde, table, program_opts, grid, workspace_size_MB, f_2,

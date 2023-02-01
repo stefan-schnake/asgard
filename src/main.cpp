@@ -275,12 +275,12 @@ int main(int argc, char **argv)
         asgard::fk::vector<prec> squared(diff);
         std::transform(squared.begin(), squared.end(), squared.begin(),
                        [](prec const &elem) { return elem * elem; });
-        auto const mean = std::accumulate(squared.begin(), squared.end(), 0.0) /
-                          squared.size();
+        auto const mean = std::accumulate(squared.begin(), squared.end(), 0.0); // /
+                          //squared.size();
         return std::sqrt(mean);
       }();
       auto const relative_error =
-          RMSE / asgard::inf_norm(analytic_solution) * 100;
+          RMSE / asgard::fm::nrm2(analytic_solution) * 100;
       auto const [rmse_errors, relative_errors] =
           asgard::gather_errors(RMSE, relative_error);
       expect(rmse_errors.size() == relative_errors.size());
