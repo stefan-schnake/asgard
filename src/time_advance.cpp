@@ -475,6 +475,8 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
     }
   };
 
+  /*
+
   // Create moment matrices that take DG function in (x,v) and transfer to DG
   // function in x
   if (first_time || update_system)
@@ -649,6 +651,108 @@ imex_advance(PDE<P> &pde, adapt::distributed_grid<P> const &adaptive_grid,
                        tolerance);
 
   return f_3;
+
+  */
+
+  // see
+  // https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#Explicit_Runge%E2%80%93Kutta_methods
+  P const a21 = 1.0;
+  P const a31 = 0.0;
+  P const a32 = 0.0;
+  P const b1  = 1.0 / 2.0;
+  P const b2  = 1.0 / 2.0;
+  P const b3  = 0.0;
+  P const c2  = 1.0;
+  P const c3  = 0.0;
+
+  // FIXME eventually want to extract RK step into function
+  // -- RK step 1
+  auto const apply_id = tools::timer.start("kronmult_setup");
+  auto fx =
+      kronmult::execute(pde, table, program_opts, grid, workspace_size_MB, x, imex_flag::imex_explicit);
+
+  tools::timer.stop(apply_id);
+  reduce_results(fx, reduced_fx, plan, get_rank());
+
+  if (pde.num_sources > 0)
+  {
+    auto const sources = get_sources(pde, adaptive_grid, transformer, time);
+    fm::axpy(sources, reduced_fx);
+  }
+
+  auto const bc0 = boundary_conditions::generate_scaled_bc(
+      unscaled_parts[0], unscaled_parts[1], pde, grid.row_start, grid.row_stop,
+      time);
+  fm::axpy(bc0, reduced_fx);
+
+  // FIXME I eventually want to return a vect here
+  fk::vector<P> rk_1(x_orig.size());
+  exchange_results(reduced_fx, rk_1, elem_size, plan, get_rank());
+  P const rk_scale_1 = a21 * dt;
+  fm::axpy(rk_1, x, rk_scale_1);
+
+  // -- RK step 2
+  tools::timer.start(apply_id);
+  fx = kronmult::execute(pde, table, program_opts, grid, workspace_size_MB, x, imex_flag::imex_explicit);
+  tools::timer.stop(apply_id);
+  reduce_results(fx, reduced_fx, plan, get_rank());
+
+  if (pde.num_sources > 0)
+  {
+    auto const sources =
+        get_sources(pde, adaptive_grid, transformer, time + c2 * dt);
+    fm::axpy(sources, reduced_fx);
+  }
+
+  fk::vector<P> const bc1 = boundary_conditions::generate_scaled_bc(
+      unscaled_parts[0], unscaled_parts[1], pde, grid.row_start, grid.row_stop,
+      time + c2 * dt);
+  fm::axpy(bc1, reduced_fx);
+
+  fk::vector<P> rk_2(x_orig.size());
+  exchange_results(reduced_fx, rk_2, elem_size, plan, get_rank());
+
+  fm::copy(x_orig, x);
+  P const rk_scale_2a = a31 * dt;
+  P const rk_scale_2b = a32 * dt;
+
+  fm::axpy(rk_1, x, rk_scale_2a);
+  fm::axpy(rk_2, x, rk_scale_2b);
+
+  // -- RK step 3
+  tools::timer.start(apply_id);
+  fx = kronmult::execute(pde, table, program_opts, grid, workspace_size_MB, x, imex_flag::imex_explicit);
+  tools::timer.stop(apply_id);
+  reduce_results(fx, reduced_fx, plan, get_rank());
+
+  if (pde.num_sources > 0)
+  {
+    auto const sources =
+        get_sources(pde, adaptive_grid, transformer, time + c3 * dt);
+    fm::axpy(sources, reduced_fx);
+  }
+
+  auto const bc2 = boundary_conditions::generate_scaled_bc(
+      unscaled_parts[0], unscaled_parts[1], pde, grid.row_start, grid.row_stop,
+      time + c3 * dt);
+  fm::axpy(bc2, reduced_fx);
+
+  fk::vector<P> rk_3(x_orig.size());
+  exchange_results(reduced_fx, rk_3, elem_size, plan, get_rank());
+
+  // -- finish
+  fm::copy(x_orig, x);
+  P const scale_1 = dt * b1;
+  P const scale_2 = dt * b2;
+  P const scale_3 = dt * b3;
+
+  fm::axpy(rk_1, x, scale_1);
+  fm::axpy(rk_2, x, scale_2);
+  fm::axpy(rk_3, x, scale_3);
+
+  return x;
+
+
 }
 
 template fk::vector<double> adaptive_advance(
