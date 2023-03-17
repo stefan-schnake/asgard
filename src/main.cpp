@@ -342,13 +342,7 @@ int main(int argc, char **argv)
       asgard::write_output(*pde, cli_input, real_space, time, i + 1,
                            f_val.size(), adaptive_grid.get_table(),
                            "asgard_real");
-    }
 #endif
-
-#ifdef ASGARD_USE_MATLAB
-    if (opts.should_plot(i))
-    {
-      ml_plot.push(std::string("rSpace_" + std::to_string(i)), real_space);
 
       ml_plot.plot_fval(*pde, adaptive_grid.get_table(), real_space,
                         analytic_solution_realspace);
