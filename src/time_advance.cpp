@@ -468,8 +468,8 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
        "-l " + std::to_string(pde.get_dimensions()[0].get_level())});
   adapt::distributed_grid adaptive_grid_1d(pde_1d, opts_1d);
 
-  asgard::basis::wavelet_transform<P, asgard::resource::host> const
-      transformer_1d(program_opts, pde_1d, false);
+  // asgard::basis::wavelet_transform<P, asgard::resource::host> const
+  // transformer_1d(opts_1d, pde_1d, false);
 
   // Create workspace for wavelet transform
   auto const dense_size = dense_space_size(pde_1d);
@@ -503,7 +503,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
   if (first_time || update_system)
   {
     std::cout << " dim0 lev = " << level << "\n";
-    std::cout << " dim1 lev = " << level << "\n";
+    std::cout << " dim1 lev = " << pde.get_dimensions()[1].get_level() << "\n";
     for (auto &m : pde.moments)
     {
       // m.createFlist(pde, program_opts);
@@ -525,7 +525,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
 
     pde.E_field.resize(dense_size);
 
-    first_time = false;
+    // first_time = false;
   }
 
   auto do_poisson_update = [&](fk::vector<P> const &f_in) {
@@ -534,8 +534,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
     fk::vector<P> mom0(dense_size);
     fm::gemv(pde.moments[0].get_moment_matrix(), f_in, mom0);
     fk::vector<P> &mom0_real = pde.moments[0].create_realspace_moment(
-        pde_1d, mom0, adaptive_grid_1d.get_table(), transformer_1d,
-        tmp_workspace);
+        pde_1d, mom0, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
     param_manager.get_parameter("n")->value = [&](P const x_v,
                                                   P const t = 0) -> P {
       ignore(t);
@@ -632,8 +631,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
   */
 
   fk::vector<P> &mom0_real = pde.moments[0].create_realspace_moment(
-      pde_1d, mom0, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom0, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   // mom0_real.print("mom0_real");
   param_manager.get_parameter("n")->value = [&](P const x_v,
                                                 P const t = 0) -> P {
@@ -645,8 +643,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
   fk::vector<P> mom1(dense_size);
   fm::gemv(pde.moments[1].get_moment_matrix(), x, mom1);
   fk::vector<P> &mom1_real = pde.moments[1].create_realspace_moment(
-      pde_1d, mom1, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom1, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   param_manager.get_parameter("u")->value = [&](P const x_v,
                                                 P const t = 0) -> P {
     return interp1(nodes, mom1_real, {x_v})[0] /
@@ -656,8 +653,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
   fk::vector<P> mom2(dense_size);
   fm::gemv(pde.moments[2].get_moment_matrix(), x, mom2);
   fk::vector<P> &mom2_real = pde.moments[2].create_realspace_moment(
-      pde_1d, mom2, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom2, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   param_manager.get_parameter("theta")->value = [&](P const x_v,
                                                     P const t = 0) -> P {
     P const u = param_manager.get_parameter("u")->value(x_v, t);
@@ -725,8 +721,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
   // TODO: refactor into more generic function
   fm::gemv(pde.moments[0].get_moment_matrix(), x, mom0);
   mom0_real = pde.moments[0].create_realspace_moment(
-      pde_1d, mom0, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom0, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   param_manager.get_parameter("n")->value = [&](P const x_v,
                                                 P const t = 0) -> P {
     ignore(t);
@@ -735,8 +730,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
 
   fm::gemv(pde.moments[1].get_moment_matrix(), x, mom1);
   mom1_real = pde.moments[1].create_realspace_moment(
-      pde_1d, mom1, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom1, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   param_manager.get_parameter("u")->value = [&](P const x_v,
                                                 P const t = 0) -> P {
     return interp1(nodes, mom1_real, {x_v})[0] /
@@ -745,8 +739,7 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
 
   fm::gemv(pde.moments[2].get_moment_matrix(), x, mom2);
   mom2_real = pde.moments[2].create_realspace_moment(
-      pde_1d, mom2, adaptive_grid_1d.get_table(), transformer_1d,
-      tmp_workspace);
+      pde_1d, mom2, adaptive_grid_1d.get_table(), transformer, tmp_workspace);
   param_manager.get_parameter("theta")->value = [&](P const x_v,
                                                     P const t = 0) -> P {
     P const u = param_manager.get_parameter("u")->value(x_v, t);
