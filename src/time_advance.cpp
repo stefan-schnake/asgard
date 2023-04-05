@@ -524,8 +524,10 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
     }
 
     pde.E_field.resize(dense_size);
+    pde.phi.resize(dense_size);
+    pde.E_source.resize(dense_size);
 
-    // first_time = false;
+    first_time = false;
   }
 
   auto do_poisson_update = [&](fk::vector<P> const &f_in) {
@@ -562,7 +564,9 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
       return interp1(nodes, poisson_E, {x_v})[0];
     };
 
-    pde.E_field = poisson_E;
+    pde.E_field  = poisson_E;
+    pde.E_source = poisson_source;
+    pde.phi      = phi;
 
     P const max_E = std::abs(*std::max_element(
         poisson_E.begin(), poisson_E.end(), [](const P &x_v, const P &y_v) {
