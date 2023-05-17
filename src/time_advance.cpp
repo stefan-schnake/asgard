@@ -468,8 +468,8 @@ imex_advance(PDE<P> &pde, kronmult_matrix<P> &operator_matrix,
        "-l " + std::to_string(pde.get_dimensions()[0].get_level())});
   adapt::distributed_grid adaptive_grid_1d(pde_1d, opts_1d);
 
-  // asgard::basis::wavelet_transform<P, asgard::resource::host> const
-  // transformer_1d(opts_1d, pde_1d, false);
+  asgard::basis::wavelet_transform<P, asgard::resource::host> const
+    transformer_1d(opts_1d, pde_1d, false);
 
   // Create workspace for wavelet transform
   auto const dense_size = dense_space_size(pde_1d);
