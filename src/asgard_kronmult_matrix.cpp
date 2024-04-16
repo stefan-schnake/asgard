@@ -134,13 +134,12 @@ make_kronmult_dense(PDE<precision> const &pde,
   int64_t flps = kronmult_matrix<precision>::compute_flops(
       num_dimensions, kron_size, num_terms, int64_t{num_rows} * num_cols);
 
-  std::cout << "  kronmult dense matrix: " << num_rows << " by " << num_cols
-            << "\n";
-  std::cout << "        Gflops per call: " << flps * 1.E-9 << "\n";
+  std::cout << "  kronmult dense matrix size: " << num_rows << " rows/cols\n";
+  std::cout << "  -- work: " << flps * 1.E-9 << " Gflops\n";
 
-  std::cout << "        memory usage (MB): "
+  std::cout << "  -- memory usage: "
             << get_MB<precision>(terms.size()) + get_MB<int>(elem.size())
-            << "\n";
+            << "MB\n";
 
 #ifdef ASGARD_USE_CUDA
   std::vector<fk::vector<precision, mem_type::owner, resource::device>>
@@ -617,25 +616,24 @@ make_kronmult_sparse(PDE<precision> const &pde,
 #endif
   }
 
-  std::cout << "  kronmult sparse matrix fill: "
+  std::cout << "  kronmult local, sparse matrix fill: "
             << 100.0 * double(spcache.num_nonz) /
                    (double(num_rows) * double(num_cols))
             << "%\n";
 
   int64_t flops = kronmult_matrix<precision>::compute_flops(
       num_dimensions, kron_size, num_terms, spcache.num_nonz);
-  std::cout << "              Gflops per call: " << flops * 1.E-9 << "\n";
+  std::cout << "  -- work: " << flops * 1.E-9 << " Gflops\n";
 
 #ifdef ASGARD_USE_CUDA
   if (mem_stats.kron_call == memory_usage::one_call)
   {
-    std::cout << "        memory usage (unique): "
+    std::cout << "  -- memory usage (unique): "
               << get_MB<int>(list_row_indx[0].size()) +
                      get_MB<int>(list_col_indx[0].size()) +
                      get_MB<int>(list_iA[0].size()) +
                      get_MB<precision>(vA.size())
               << "\n";
-    std::cout << "        memory usage (shared): 0\n";
     return kronmult_matrix<precision>(
         num_dimensions, kron_size, num_rows, num_cols, num_terms,
         list_row_indx[0].clone_onto_device(),
@@ -1396,8 +1394,8 @@ void set_specific_mode(PDE<precision> const &pde,
       gflops += mat.gvals_[mat.patterns_per_dim * (t * num_dimensions + d)].size();
   gflops *= 2; // matrix vector product uses multiply-add 2 flops per entry
 
-  std::cout << "Kronmult using global algorithm:\n";
-  std::cout << "    work: " << static_cast<double>(gflops) * 1.E-9 << " Gflops\n";
+  std::cout << "  kronmult using global algorithm\n";
+  std::cout << "  -- work: " << static_cast<double>(gflops) * 1.E-9 << " Gflops\n";
   mat.flops_[imex_indx] = std::max(gflops, int64_t{1}); // cannot be zero
 
   int64_t num_ints = 0;
@@ -1416,12 +1414,15 @@ void set_specific_mode(PDE<precision> const &pde,
       num_fps += mat.gvals_[mat.patterns_per_dim * t * num_dimensions + d].size();
 
   num_fps += 2 * mat.num_active_;
-  std::cout << "  -- memory usage:\n";
+  std::cout << "  -- memory usage:";
   int64_t total = get_MB<precision>(num_fps) + get_MB<int>(num_ints);
   if (total > 1024)
-    std::cout << "    CPU: " << (1 + total / 1024) << "GB\n";
+    std::cout << "  CPU: " << (1 + total / 1024) << "GB";
   else
-    std::cout << "    CPU: " << total << "MB\n";
+    std::cout << "  CPU: " << total << "MB";
+#ifndef ASGARD_USE_CUDA
+  std::cout << '\n';
+#endif
 }
 
 #ifdef ASGARD_USE_CUDA
@@ -1446,9 +1447,9 @@ void global_kron_matrix<precision>::
 
   int64_t total = gpu_global[imex_indx].memory() / (1024 * 1024);
   if (total > 1024)
-    std::cout << "    GPU: " << (1 + total / 1024) << "GB\n";
+    std::cout << "  GPU: " << (1 + total / 1024) << "GB\n";
   else
-    std::cout << "    GPU: " << total << "MB\n";
+    std::cout << "  GPU: " << total << "MB\n";
 }
 #endif
 
