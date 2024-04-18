@@ -43,6 +43,33 @@ TEST_CASE("data manipulation in 2d", "[order2d]")
   REQUIRE(spdata[1][2] == 4);
 }
 
+TEST_CASE("indexset union", "[union]")
+{
+  std::vector<int> data1 = {0, 0, 0, 1, 0, 2, 1, 1, 1, 4};
+  std::vector<int> data2 = {0, 0, 0, 3, 1, 1, 1, 5};
+  std::vector<int> ref   = {0, 0, 0, 1, 0, 2, 0, 3, 1, 1, 1, 4, 1, 5};
+  indexset iset1(2, std::vector<int>(data1));
+  indexset iset2(2, std::vector<int>(data2));
+
+  indexset u = iset1;
+  u += iset2;
+
+  REQUIRE(u.num_indexes() == 7);
+  for (size_t i = 0; i < ref.size(); i++)
+    REQUIRE(u[0][i] == ref[i]);
+
+  u = iset2;
+  REQUIRE(u.num_indexes() == iset2.num_indexes());
+  for (int i = 0; i < iset2.num_indexes(); i++)
+    for (int d = 0; d < iset2.num_dimensions(); d++)
+      REQUIRE(u[i][d] == iset2[i][d]);
+
+  u += iset1;
+  REQUIRE(u.num_indexes() == 7);
+  for (size_t i = 0; i < ref.size(); i++)
+    REQUIRE(u[0][i] == ref[i]);
+}
+
 TEST_CASE("indexset sort", "[sort]")
 {
   // indexes (0, 0), (0, 1), (1, 0), (1, 1), (2, 0)
@@ -94,7 +121,7 @@ TEST_CASE("connectivity full and expanded to dof", "[connectivity]")
   for (int col = cells.row_begin(4); col < cells.row_end(4); col++)
     REQUIRE(gold_connect_row4[col - cells.row_begin(4)] == cells[col]);
 
-  //connect_1d(cells, 0).dump(); // uncomment to double-check (non-automated)
+  //connect_1d(cells, 0).print(std::cerr); // uncomment for manual check
 
   // expand the cells by adding the degrees of freedom for quadratic basis
   // i.e., each entry in the sparse matrix is replaced with a 3x3 block
@@ -119,7 +146,7 @@ TEST_CASE("connectivity full and expanded to dof", "[connectivity]")
     REQUIRE(col + 3 == expanded[expanded.row_begin(13) + col]);
 
   cells = connect_1d(4, connect_1d::hierarchy::full);
-  cells.dump();
+  cells.print();
 }
 
 TEST_CASE("testing volume connections", "[connectivity]")
