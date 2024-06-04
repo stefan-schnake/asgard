@@ -78,9 +78,11 @@ template<typename P>
 void apply_diagonal_precond(std::vector<P> const &pc, P dt,
                             fk::vector<P, mem_type::view, resource::host> &x)
 {
+ignore(dt);
 #pragma omp parallel for
   for (size_t i = 0; i < pc.size(); i++)
-    x[i] /= (1.0 - dt * pc[i]);
+    //x[i] /= (1.0 - dt * pc[i]);
+    x[i] *= 1.0;
 }
 #ifdef ASGARD_USE_CUDA
 template<typename P>

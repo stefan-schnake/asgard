@@ -488,4 +488,95 @@ restart_data<P> read_output(PDE<P> &pde, elements::table const &hash_table,
   return restart_data<P>{solution, time, step_index, active_table, max_level};
 }
 
+
+template<typename P>
+void write_term_data(PDE<P> const &pde, parser const &cli_input,
+                      P const time, int const file_index,
+                      std::string const output_dataset_name = "term_data")
+{
+  tools::timer.start("write_output");
+  std::string const output_file_name =
+      output_dataset_name + "_" + std::to_string(file_index) + ".h5";
+
+  // TODO: Rewrite this entirely!
+  HighFive::File file(output_file_name, HighFive::File::ReadWrite |
+                                            HighFive::File::Create |
+                                            HighFive::File::Truncate);
+
+  H5Easy::DumpOptions opts;
+  opts.setChunkSize(std::vector<hsize_t>{2});
+
+  HighFive::DataSetCreateProps plist;
+  plist.add(HighFive::Chunking(hsize_t{64}));
+  plist.add(HighFive::Deflate(9));
+
+  HighFive::DataSetCreateProps plist_2d;
+  plist_2d.add(HighFive::Chunking({hsize_t{8}, hsize_t{8}}));
+  plist_2d.add(HighFive::Deflate(9));
+
+  H5Easy::dump(file, "pde", cli_input.get_pde_string());
+  H5Easy::dump(file, "degree", cli_input.get_degree());
+  H5Easy::dump(file, "time", time);
+  H5Easy::dump(file, "max_level", pde.max_level);
+
+  // save the term coefficient matrices
+  auto coeff_group = file.createGroup("coeffs");
+  for (int term = 0; term < pde.num_terms; term++)
+  {
+    auto term_group = coeff_group.createGroup("term" + std::to_string(term));
+
+    for (int dim = 0; dim < pde.num_dims; dim++)
+    {
+      term_group
+          .createDataSet<P>(
+              "dim" + std::to_string(dim),
+              HighFive::DataSpace(
+                  {static_cast<size_t>(pde.get_coefficients(term, dim).nrows()),
+                   static_cast<size_t>(
+                       pde.get_coefficients(term, dim).ncols())}),
+              plist_2d)
+          .write_raw(pde.get_coefficients(term, dim).data());
+    }
+  }
+
+  HighFive::DataSetCreateProps plist_pterm;
+  plist_pterm.add(HighFive::Chunking({hsize_t{2}, hsize_t{2}}));
+  plist_pterm.add(HighFive::Deflate(9));
+
+  // save the partial term coefficient matrices
+  auto pterm_coeff_group = file.createGroup("pterm_coeffs");
+  auto term_set          = pde.get_terms();
+  for (int term = 0; term < pde.num_terms; term++)
+  {
+    auto term_group =
+        pterm_coeff_group.createGroup("term" + std::to_string(term));
+
+    for (int dim = 0; dim < pde.num_dims; dim++)
+    {
+      int const level = pde.get_dimensions()[dim].get_level();
+
+      auto dim_group = term_group.createGroup("dim" + std::to_string(dim));
+
+      auto &pterms = term_set[term][dim].get_partial_terms();
+      for (size_t pterm = 0; pterm < pterms.size(); pterm++)
+      {
+        dim_group
+            .createDataSet<P>(
+                "pterm" + std::to_string(pterm),
+                HighFive::DataSpace(
+                    {static_cast<size_t>(
+                         pterms[pterm].get_coefficients(level).nrows()),
+                     static_cast<size_t>(
+                         pterms[pterm].get_coefficients(level).ncols())}),
+                plist_pterm)
+            .write_raw(pterms[pterm].get_coefficients(level).data());
+      }
+    }
+  }
+
+  file.flush();
+  tools::timer.stop("write_output");
+
+}
+
 } // namespace asgard

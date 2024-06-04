@@ -233,6 +233,8 @@ int main(int argc, char **argv)
     asgard::write_output(*pde, cli_input, initial_condition,
                          static_cast<prec>(0.0), 0, initial_condition.size(),
                          adaptive_grid.get_table(), "asgard_wavelet");
+
+    asgard::write_term_data(*pde, cli_input, static_cast<prec>(0.0), 0);
   }
   if (cli_input.get_realspace_output_freq() > 0)
   {
