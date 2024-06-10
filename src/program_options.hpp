@@ -58,7 +58,7 @@ enum class PDE_opts
   collisional_landau,
   collisional_landau_1x2v,
   collisional_landau_1x3v,
-  sphericalLB
+  sphericalLB_0x2v
   // FIXME will need to add the user supplied PDE choice
 };
 
@@ -203,7 +203,7 @@ static pde_map_t const pde_mapping = {
     {"sphericalLB",
      PDE_descriptor("LB in Spherical coordinates. df/dt == "
                     "div_v((v-u)f + theta*grad_v f)",
-                    PDE_opts::sphericalLB)}};
+                    PDE_opts::sphericalLB_0x2v)}};
 
 // class to parse command line input
 class parser

@@ -13,10 +13,10 @@ namespace asgard
 //  BC in v is all inflow in advection for v and Neumann for diffusion in v
 
 template<typename P>
-class PDE_sphericalLB : public PDE<P>
+class PDE_sphericalLB_0x2v : public PDE<P>
 {
 public:
-  PDE_sphericalLB(parser const &cli_input)
+  PDE_sphericalLB_0x2v(parser const &cli_input)
       : PDE<P>(cli_input, num_dims_, num_sources_, num_terms_, dimensions_,
                terms_, sources_, exact_vector_funcs_, exact_scalar_func_,
                get_dt_, do_poisson_solve_, has_analytic_soln_, moments_,
@@ -37,19 +37,6 @@ private:
   static P constexpr T   = 1.0;
   static P constexpr u_f = 1.0;
 
-//   static fk::vector<P>
-//   initial_condition_dim_x(fk::vector<P> const &x, P const t = 0)
-//   {
-//     ignore(t);
-
-//     fk::vector<P> fx(x.size());
-//     std::transform(
-//         x.begin(), x.end(), fx.begin(), [coefficient, T](P const x_v) -> P {
-//           return 1.0;
-//         });
-//     return fx;
-//   }
-
   static fk::vector<P>
   initial_condition_dim_r(fk::vector<P> const &x, P const t = 0)
   {
@@ -60,8 +47,8 @@ private:
     fk::vector<P> fx(x.size());
     std::transform(
         x.begin(), x.end(), fx.begin(), [coefficient, T_init](P const x_v) -> P {
-          return (x_v < 3.5) ? 1.0/( 2.0 * std::pow(3.5,3) / 3.0 ) : 0.0;
-          //return 2 * PI * std::pow(coefficient,3) * std::exp(-(0.5 / T_init) * std::pow(x_v, 2));
+          //return (x_v < 3.5) ? 1.0/( 2.0 * std::pow(3.5,3) / 3.0 ) : 0.0;
+          return 2 * PI * std::pow(coefficient,3) * std::exp(-(0.5 / T_init) * std::pow(x_v, 2));
           //ignore(x_v); return 1.0;
         });
     return fx;
@@ -75,32 +62,17 @@ private:
     fk::vector<P> fx(x.size());
     std::transform(
         x.begin(), x.end(), fx.begin(), [](P const x_v) -> P {
-          //ignore(x_v); return 1.0;
-          return (x_v < 3.0*PI/4.0) & (x_v > PI/2.0) ? 2.0*std::sqrt(2.0) : 0.0;
-        });
-    return fx;
-  }
-
-  static fk::vector<P>
-  initial_condition_dim_phi(fk::vector<P> const &x, P const t = 0)
-  {
-    ignore(t);
-
-    fk::vector<P> fx(x.size());
-    std::transform(
-        x.begin(), x.end(), fx.begin(), [](P const x_v) -> P {
-          ignore(x_v);
-          return 1.0;
+          ignore(x_v); return 1.0;
+          //return (x_v < 3.0*PI/4.0) & (x_v > PI/2.0) ? 2.0*std::sqrt(2.0) : 0.0;
         });
     return fx;
   }
 
   // --- Specify Jacobians ---
 
-  // Volume jacobian            = r^2 sin(th) dr dth dphi
-  // Surface jacobian (r const) = r^2 sin(th)    dth dphi
-  //                 (th const) = r   sin(th) dr     dphi
-  //                (phi const) = r           dr dth
+  // Volume jacobian            = r^2 sin(th) dr dth
+  // Surface jacobian (r const) = r^2 sin(th)    dth
+  //                 (th const) = r   sin(th) dr    
 
   static P jac_r(P const x, P const time = 0)
   {
@@ -120,14 +92,6 @@ private:
     return std::sin(x);
   }
 
-
-  /*
-  inline static dimension<P> const dim_x =
-      dimension<P>(-1.0, 1.0, 3, default_degree,
-                   {initial_condition_dim_r},
-                   nullptr, "v1");
-  */
-
   inline static dimension<P> const dim_r =
       dimension<P>(0.0, 7.0, 3, default_degree,
                    initial_condition_dim_r,
@@ -138,14 +102,7 @@ private:
                    initial_condition_dim_th,
                    jac_th, "th");
 
-/*
-  inline static dimension<P> const dim_phi =
-      dimension<P>(0.0, 2*M_PI, 3, default_degree,
-                   initial_condition_dim_phi,
-                   nullptr, "phi");
-*/                   
-
-  inline static std::vector<dimension<P>> const dimensions_ = {dim_r, dim_th}; //, dim_phi
+  inline static std::vector<dimension<P>> const dimensions_ = {dim_r, dim_th};
 
   /* Define the moments */
   static fk::vector<P> moment_1(fk::vector<P> const &x, P const t = 0)
@@ -213,18 +170,6 @@ private:
               "I",   // name
               {mass_th_pterm}, imex_flag::imex_implicit);
 
-/*
-  // phi
-  inline static const partial_term<P> mass_phi_pterm = partial_term<P>(
-      coefficient_type::mass, nullptr, nullptr, flux_type::central,
-      boundary_condition::periodic, boundary_condition::periodic);
-
-  inline static term<P> const mass_phi =
-      term<P>(false, // time-dependent
-              "I",   // name
-              {mass_phi_pterm}, imex_flag::imex_implicit);
-*/
-
   // Constant Identity term
 
   inline static const partial_term<P> I_pterm = partial_term<P>(
@@ -258,7 +203,7 @@ private:
               "I1_v", // name
               {nu_v_pterm}, imex_flag::imex_implicit);
 
-  inline static std::vector<term<P>> const terms_div_v_r = {nu_v_term, mass_th}; // , mass_phi
+  inline static std::vector<term<P>> const terms_div_v_r = {nu_v_term, mass_th}; 
 
   // Implict Term 2
   // \grad_v \cdot (-u_f\hat{z} f ) -- radial direction
@@ -300,7 +245,7 @@ private:
               "I1_v", // name
               {surf_u_th_pterm}, imex_flag::imex_implicit); 
 
-  inline static std::vector<term<P>> const terms_div_u_r = {div_u_r_term, surf_u_th_term}; // , mass_phi
+  inline static std::vector<term<P>> const terms_div_u_r = {div_u_r_term, surf_u_th_term};
 
 
   // Implict Term 3
@@ -335,7 +280,7 @@ private:
               "I",   // name
               {div_u_th_pterm}, imex_flag::imex_implicit);        
 
-  inline static std::vector<term<P>> const terms_div_u_th = {surf_r_term, div_u_th_term}; // , mass_phi
+  inline static std::vector<term<P>> const terms_div_u_th = {surf_r_term, div_u_th_term};
 
   // Diffusion term
   // grad_v \cdot ( T \grad_v f ) -- radial component
@@ -370,38 +315,33 @@ private:
               "I3_v", // name
               {mass_th_pterm, mass_th_pterm}, imex_flag::imex_implicit);
 
-/*
-  inline static term<P> const surf_phi_chain = //this is identity
+  inline static std::vector<term<P>> const terms_diff_r = {
+      diff_r_chain, surf_th_chain};
+
+  /*
+  // Penalty Term -- radial
+
+  static P nu_theta(P const x, P const time = 0)
+  {
+    ignore(x);
+    ignore(time);
+    return T * nu;
+  }
+
+  inline static const partial_term<P> penalty_r_pterm = partial_term<P>(
+      coefficient_type::penalty, nu_theta, nullptr, flux_type::downwind,
+      boundary_condition::neumann, boundary_condition::neumann,
+      homogeneity::homogeneous, homogeneity::homogeneous,
+      {},nullptr,{},nullptr,jac_r_sq);
+
+  inline static term<P> const penalty_r =
       term<P>(false,  // time-dependent
               "I3_v", // name
-              {mass_phi_pterm, mass_phi_pterm}, imex_flag::imex_implicit);
-*/
+              {penalty_r_pterm}, imex_flag::imex_implicit);
 
-  inline static std::vector<term<P>> const terms_diff_r = {
-      diff_r_chain, surf_th_chain}; // , surf_phi_chain
-
-  // // Penalty Term -- radial
-
-  // static P nu_theta(P const x, P const time = 0)
-  // {
-  //   ignore(x);
-  //   ignore(time);
-  //   return T * nu;
-  // }
-
-  // inline static const partial_term<P> penalty_r_pterm = partial_term<P>(
-  //     coefficient_type::penalty, nu_theta, nullptr, flux_type::downwind,
-  //     boundary_condition::neumann, boundary_condition::neumann,
-  //     homogeneity::homogeneous, homogeneity::homogeneous,
-  //     {},nullptr,{},nullptr,jac_r_sq);
-
-  // inline static term<P> const penalty_r =
-  //     term<P>(false,  // time-dependent
-  //             "I3_v", // name
-  //             {penalty_r_pterm}, imex_flag::imex_implicit);
-
-  // inline static std::vector<term<P>> const terms_penalty_r = {
-  //     penalty_r, mass_th}; //, mass_phi
+  inline static std::vector<term<P>> const terms_penalty_r = {
+      penalty_r, mass_th};
+  */
 
   // Diffusion term
   // grad_v \cdot ( T \grad_v f ) -- azimuthal portion
@@ -429,27 +369,7 @@ private:
               {div_th_pterm, grad_th_pterm}, imex_flag::imex_implicit);
 
   inline static std::vector<term<P>> const terms_diff_th = {
-      surf_r_chain, diff_th_chain }; // , surf_phi_chain
-
-  // Diffusion Term
-  // grad_v \cdot ( T \grad_v f ) -- polar portion
-
-  // inline static const partial_term<P> div_phi_pterm = partial_term<P>(
-  //     coefficient_type::div, sqrt_nu_theta, nullptr, flux_type::central,
-  //     boundary_condition::periodic, boundary_condition::periodic);
-
-  // inline static const partial_term<P> grad_phi_pterm = partial_term<P>(
-  //     coefficient_type::grad, sqrt_nu_theta, nullptr, flux_type::central,
-  //     boundary_condition::periodic, boundary_condition::periodic);
-
-  // inline static term<P> const diff_phi_chain =
-  //     term<P>(false,  // time-dependent
-  //             "I3_v", // name
-  //             {div_phi_pterm, grad_phi_pterm}, imex_flag::imex_implicit);
-
-  // inline static std::vector<term<P>> const terms_diff_phi = {
-  //     surf_r_chain, surf_phi_chain, diff_phi_chain}; // second term is identity 
-  //                                                    // due to surface jacobian
+      surf_r_chain, diff_th_chain };
 
   inline static term_set<P> const terms_ = {terms_div_v_r,terms_div_u_r,terms_div_u_th,
                                             terms_diff_r,terms_diff_th};
@@ -483,22 +403,8 @@ private:
     return fx;
   }
 
-/*
-  static fk::vector<P> exact_dim_phi(fk::vector<P> const &x, P const t = 0)
-  {
-    ignore(t);
-    fk::vector<P> fx(x.size());
-    std::transform(
-        x.begin(), x.end(), fx.begin(), [](P const x_v) -> P {
-          ignore(x_v);
-          return 1.0;
-        });
-    return fx;
-  }
-*/
-
   inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {
-      exact_dim_r, exact_dim_th}; // , exact_dim_phi
+      exact_dim_r, exact_dim_th};
 
   inline static scalar_func<P> const exact_scalar_func_ = {};
 
