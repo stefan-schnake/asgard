@@ -1196,7 +1196,8 @@ bool get_flux_direction(PDE<precision> const &pde, int term_id)
   for (int d = 0; d < pde.num_dims; d++)
     for (auto const &pt : pde.get_terms()[term_id][d].get_partial_terms())
       if (pt.coeff_type == coefficient_type::div or
-          pt.coeff_type == coefficient_type::grad)
+          pt.coeff_type == coefficient_type::grad or
+          pt.coeff_type == coefficient_type::penalty)
         return d;
   return -1;
 }
@@ -1327,7 +1328,7 @@ make_global_kron_matrix(PDE<precision> const &pde,
     if (num_active > 1)
     {
       int const flux_dir = get_flux_direction(pde, t);
-      if (flux_dir != active_dirs[0]) // make the flux direction first
+      if (flux_dir > -1 and flux_dir != active_dirs[0]) // make the flux direction first
         std::swap(active_dirs[0], active_dirs[flux_dir]);
     }
 
