@@ -28,14 +28,14 @@ get_sources(PDE<P> const &pde, adapt::distributed_grid<P> const &grid,
   auto const my_subgrid = grid.get_subgrid(get_rank());
   // FIXME assume uniform degree
   auto const degree = pde.get_dimensions()[0].get_degree();
-  auto const dof    = std::pow(degree, pde.num_dims) * my_subgrid.nrows();
+  auto const dof    = std::pow(degree, pde.num_dims()) * my_subgrid.nrows();
   fk::vector<P> sources(dof);
-  for (auto const &source : pde.sources)
+  for (auto const &source : pde.sources())
   {
     auto const source_vect = transform_and_combine_dimensions(
-        pde, source.source_funcs, grid.get_table(), transformer,
+        pde, source.source_funcs(), grid.get_table(), transformer,
         my_subgrid.row_start, my_subgrid.row_stop, degree, time,
-        source.time_func(time));
+        source.time_func()(time));
     fm::axpy(source_vect, sources);
   }
   return sources;
@@ -220,7 +220,7 @@ explicit_advance(PDE<P> const &pde, matrix_list<P> &operator_matrices,
   }
   reduce_results(fx, reduced_fx, plan, get_rank());
 
-  if (pde.num_sources > 0)
+  if (pde.num_sources() > 0)
   {
     auto const sources = get_sources(pde, adaptive_grid, transformer, time);
     fm::axpy(sources, reduced_fx);
@@ -245,7 +245,7 @@ explicit_advance(PDE<P> const &pde, matrix_list<P> &operator_matrices,
   }
   reduce_results(fx, reduced_fx, plan, get_rank());
 
-  if (pde.num_sources > 0)
+  if (pde.num_sources() > 0)
   {
     auto const sources =
         get_sources(pde, adaptive_grid, transformer, time + c2 * dt);
@@ -275,7 +275,7 @@ explicit_advance(PDE<P> const &pde, matrix_list<P> &operator_matrices,
   }
   reduce_results(fx, reduced_fx, plan, get_rank());
 
-  if (pde.num_sources > 0)
+  if (pde.num_sources() > 0)
   {
     auto const sources =
         get_sources(pde, adaptive_grid, transformer, time + c3 * dt);
@@ -328,7 +328,7 @@ implicit_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
   auto const &table   = adaptive_grid.get_table();
   auto const dt       = pde.get_dt();
   int const degree    = pde.get_dimensions()[0].get_degree();
-  int const elem_size = static_cast<int>(std::pow(degree, pde.num_dims));
+  int const elem_size = static_cast<int>(std::pow(degree, pde.num_dims()));
 
 #ifdef ASGARD_USE_SCALAPACK
   auto const size = elem_size * adaptive_grid.get_subgrid(get_rank()).nrows();
@@ -337,7 +337,7 @@ implicit_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
 #else
   fk::vector<P> x(x_orig);
 #endif
-  if (pde.num_sources > 0)
+  if (pde.num_sources() > 0)
   {
     auto const sources =
         get_sources(pde, adaptive_grid, transformer, time + dt);
@@ -530,7 +530,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
 
   auto const &plan       = adaptive_grid.get_distrib_plan();
   auto const &grid       = adaptive_grid.get_subgrid(get_rank());
-  int const elem_size    = static_cast<int>(std::pow(degree, pde.num_dims));
+  int const elem_size    = static_cast<int>(std::pow(degree, pde.num_dims()));
   int const A_local_rows = elem_size * grid.nrows();
 
   fk::vector<P, mem_type::owner, imex_resrc> reduced_fx(A_local_rows);
@@ -553,7 +553,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
       // expect(m.get_moment_matrix().nrows() > 0);
     }
 
-    if (pde.do_poisson_solve)
+    if (pde.do_poisson_solve())
     {
       // Setup poisson matrix initially
       solver::setup_poisson(N_elements, min, max, pde.poisson_diag,
@@ -665,7 +665,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
           return interp1(nodes, mom1_real, {x_v})[0] /
                  param_manager.get_parameter("n")->value(x_v, t);
         };
-        if (pde.num_dims == 3 && pde.moments.size() > 3)
+        if (pde.num_dims() == 3 && pde.moments.size() > 3)
         {
           // Calculate additional moments for PDEs with more than one velocity
           // dimension
@@ -714,7 +714,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
                    0.5 * (std::pow(u1, 2) + std::pow(u2, 2));
           };
         }
-        else if (pde.num_dims == 4 && pde.moments.size() > 6)
+        else if (pde.num_dims() == 4 && pde.moments.size() > 6)
         {
           // Moments for 1X3V case
           // TODO: this will be refactored to replace dimension cases in the
@@ -785,7 +785,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
         }
       };
 
-  if (pde.do_poisson_solve)
+  if (pde.do_poisson_solve())
   {
     do_poisson_update(f);
   }
@@ -832,7 +832,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
   int const max_iter = program_opts.gmres_outer_iterations;
   fk::vector<P, mem_type::owner, imex_resrc> f_1(f.size());
   fk::vector<P, mem_type::owner, imex_resrc> f_1_output(f.size());
-  if (pde.do_collision_operator)
+  if (pde.do_collision_operator())
   {
     // Update coeffs
     generate_all_coefficients<P>(pde, transformer);
@@ -884,7 +884,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
   tools::timer.start("explicit_2");
   fm::copy(f_orig_dev, f); // f here is now f_0
 
-  if (pde.do_poisson_solve)
+  if (pde.do_poisson_solve())
   {
     do_poisson_update(f_1);
   }
@@ -919,7 +919,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
   fm::axpy(f_1, f);    // f is now f_0 + f_2
   fm::scal(P{0.5}, f); // f = 0.5 * (f_0 + f_2) = f_2s
   tools::timer.stop("explicit_2");
-  if (pde.do_collision_operator)
+  if (pde.do_collision_operator())
   {
     tools::timer.start("implicit_2");
   }
@@ -929,7 +929,7 @@ imex_advance(PDE<P> &pde, matrix_list<P> &operator_matrices,
   tools::timer.stop("implicit_2_mom");
 
   // Implicit step f_2: f_2 - dt B f_2 = f_2s
-  if (pde.do_collision_operator)
+  if (pde.do_collision_operator())
   {
     // Update coeffs
     tools::timer.start("implicit_2_coeff");

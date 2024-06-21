@@ -15,11 +15,41 @@ class PDE_vlasov_two_stream : public PDE<P>
 {
 public:
   PDE_vlasov_two_stream(parser const &cli_input)
-      : PDE<P>(cli_input, num_dims_, num_sources_, num_terms_, dimensions_,
-               terms_, sources_, exact_vector_funcs_, exact_scalar_func_,
-               get_dt_, do_poisson_solve_, has_analytic_soln_, moments_,
-               do_collision_operator_)
   {
+    int constexpr num_dims          = 2;
+    int constexpr num_sources       = 0;
+    int constexpr num_terms         = 4;
+    bool constexpr do_poisson_solve = true;
+    // disable implicit steps in IMEX
+    bool constexpr do_collision_operator = false;
+    bool constexpr has_analytic_soln     = false;
+    int constexpr default_degree         = 3;
+
+    term_set<P> terms = {std::vector<term<P>>{term_e1x, term_e1v},
+                         std::vector<term<P>>{term_e2x, term_e2v},
+                         std::vector<term<P>>{E_mass_x_pos, div_v_dn},
+                         std::vector<term<P>>{E_mass_x_neg, div_v_up}};
+
+    // using empty instances for exact_vector_funcs and exact_time
+    this->initialize(cli_input, num_dims, num_sources, num_terms,
+                     // defining the dimensions
+                     std::vector<dimension<P>>{
+                         dimension<P>(-2.0 * PI, 2.0 * PI, 4, default_degree,
+                                      initial_condition_dim_x_0, nullptr, "x"),
+                         dimension<P>(-2.0 * PI, 2.0 * PI, 3, default_degree,
+                                      initial_condition_dim_v_0, nullptr, "v")},
+                     // defining the set of terms
+                     term_set<P>{std::vector<term<P>>{term_e1x, term_e1v},
+                                 std::vector<term<P>>{term_e2x, term_e2v},
+                                 std::vector<term<P>>{E_mass_x_pos, div_v_dn},
+                                 std::vector<term<P>>{E_mass_x_neg, div_v_up}},
+                     std::vector<source<P>>{},       // no sources
+                     std::vector<md_func_type<P>>{}, // no exact solution
+                     scalar_func<P>{},               // no exact time
+                     get_dt_, do_poisson_solve, has_analytic_soln,
+                     std::vector<moment<P>>{moment0, moment1, moment2}, // moments
+                     do_collision_operator);
+
     param_manager.add_parameter(parameter<P>{"n", n});
     param_manager.add_parameter(parameter<P>{"u", u});
     param_manager.add_parameter(parameter<P>{"theta", theta});
@@ -29,15 +59,6 @@ public:
   }
 
 private:
-  static int constexpr num_dims_          = 2;
-  static int constexpr num_sources_       = 0;
-  static int constexpr num_terms_         = 4;
-  static bool constexpr do_poisson_solve_ = true;
-  // disable implicit steps in IMEX
-  static bool constexpr do_collision_operator_ = false;
-  static bool constexpr has_analytic_soln_     = false;
-  static int constexpr default_degree          = 3;
-
   static fk::vector<P>
   initial_condition_dim_x_0(fk::vector<P> const &x, P const t = 0)
   {
@@ -63,17 +84,6 @@ private:
         });
     return fx;
   }
-
-  /* Define the dimension */
-  inline static dimension<P> const dim_0 =
-      dimension<P>(-2.0 * PI, 2.0 * PI, 4, default_degree,
-                   initial_condition_dim_x_0, nullptr, "x");
-
-  inline static dimension<P> const dim_1 =
-      dimension<P>(-2.0 * PI, 2.0 * PI, 3, default_degree,
-                   initial_condition_dim_v_0, nullptr, "v");
-
-  inline static std::vector<dimension<P>> const dimensions_ = {dim_0, dim_1};
 
   /* Define the moments */
   static fk::vector<P> moment0_f1(fk::vector<P> const &x, P const t = 0)
@@ -107,9 +117,6 @@ private:
       std::vector<md_func_type<P>>({{moment0_f1, moment1_f1, moment0_f1}}));
   inline static moment<P> const moment2 = moment<P>(
       std::vector<md_func_type<P>>({{moment0_f1, moment2_f1, moment0_f1}}));
-
-  inline static std::vector<moment<P>> const moments_ = {moment0, moment1,
-                                                         moment2};
 
   /* Construct (n, u, theta) */
   static P n(P const &x, P const t = 0)
@@ -190,8 +197,6 @@ private:
               "E1_v", // name
               {e1_pterm_v}, imex_flag::imex_explicit);
 
-  inline static std::vector<term<P>> const terms_1 = {term_e1x, term_e1v};
-
   // Term 2
   // -v\cdot\grad_x f for v < 0
   //
@@ -225,8 +230,6 @@ private:
       term<P>(false,  // time-dependent
               "E2_v", // name
               {e2_pterm_v}, imex_flag::imex_explicit);
-
-  inline static std::vector<term<P>> const terms_2 = {term_e2x, term_e2v};
 
   // Term 3
   // -E\cdot\grad_v f for E > 0
@@ -265,8 +268,6 @@ private:
               "",    // name
               {pterm_div_v_dn}, imex_flag::imex_explicit);
 
-  inline static std::vector<term<P>> const terms_3 = {E_mass_x_pos, div_v_dn};
-
   // Term 4
   // E\cdot\grad_v f for E < 0
   //
@@ -297,13 +298,6 @@ private:
               "",    // name
               {pterm_div_v_up}, imex_flag::imex_explicit);
 
-  inline static std::vector<term<P>> const terms_4 = {E_mass_x_neg, div_v_up};
-
-  inline static term_set<P> const terms_ = {terms_1, terms_2, terms_3, terms_4};
-
-  inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {};
-  inline static scalar_func<P> const exact_scalar_func_               = {};
-
   static P get_dt_(dimension<P> const &dim)
   {
     ignore(dim);
@@ -315,9 +309,6 @@ private:
     // (Lmax - Lmin) / 2 ^ LevX * CFL
     return (6.0 - (-6.0)) / fm::two_raised_to(3);
   }
-
-  /* problem contains no sources */
-  inline static std::vector<source<P>> const sources_ = {};
 };
 
 } // namespace asgard
