@@ -224,6 +224,7 @@ void cpu_dense(int const num_rows, int num_cols, int const num_terms,
             for (int s = 0; s < n; s++)
               for (int k = 0; k < n; k++)
                 W[s][k] += x[tj + n * j + k] * A[j * n + s];
+
           A = &vA[t][vstride + n * n * (ix[1] * num_1d_blocks + iy[1])];
           ASGARD_PRAGMA_OMP_SIMD(collapse(3))
           for (int k = 0; k < n; k++)

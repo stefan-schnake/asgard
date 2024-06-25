@@ -7,10 +7,6 @@
 #include <cuda_runtime.h>
 #endif
 
-#ifdef ASGARD_USE_OPENMP
-#include <omp.h>
-#endif
-
 #include <cstdlib>
 #include <limits.h>
 #include <mutex>
@@ -39,6 +35,15 @@ std::vector<int> get_used_terms(PDE<precision> const &pde, options const &opts,
 
     return terms;
   }
+}
+
+template<typename precision>
+vector2d<int> get_cells(int num_dimensions, adapt::distributed_grid<precision> const &dis_grid)
+{
+  auto const &grid         = dis_grid.get_subgrid(get_rank());
+  int const *const asg_idx = dis_grid.get_table().get_active_table().data();
+  int const num_cells      = grid.col_stop - grid.col_start + 1;
+  return asg2tsg_convert(num_dimensions, num_cells, asg_idx);
 }
 
 #ifndef KRON_MODE_GLOBAL
@@ -361,8 +366,7 @@ make_kronmult_sparse(PDE<precision> const &pde,
   int const num_1d = spcache.cells1d.num_connections();
 
 #ifdef ASGARD_USE_CUDA
-  int const tensor_size = kronmult_matrix<precision>::compute_tensor_size(
-      num_dimensions, kron_size);
+  int const tensor_size = fm::ipow<int>(kron_size, num_dimensions);
 #endif
 
   // storing the 1D operator matrices by 1D row and column
@@ -839,8 +843,7 @@ compute_mem_usage(PDE<P> const &pde,
   // first we compute the size of the state vectors (x and y) and then we
   // add the size of the coefficients (based on sparse/dense mode)
   int64_t base_line_entries =
-      (num_rows + num_cols) *
-      kronmult_matrix<P>::compute_tensor_size(num_dimensions, kron_size);
+      (num_rows + num_cols) * fm::ipow<int64_t>(kron_size, num_dimensions);
 
   if (program_options.kmode == kronmult_mode::dense and not force_sparse)
   {
@@ -1191,7 +1194,7 @@ bool check_identity_term(PDE<precision> const &pde, int term_id, int dim)
 }
 
 template<typename precision>
-bool get_flux_direction(PDE<precision> const &pde, int term_id)
+int get_flux_direction(PDE<precision> const &pde, int term_id)
 {
   for (int d = 0; d < pde.num_dims(); d++)
     for (auto const &pt : pde.get_terms()[term_id][d].get_partial_terms())
@@ -1319,21 +1322,18 @@ make_global_kron_matrix(PDE<precision> const &pde,
   std::vector<int> active_dirs(num_dimensions);
   for (int t = 0; t < num_terms; t++)
   {
+    int const flux_dir = get_flux_direction(pde, t);
+
     active_dirs.clear();
     for (int d = 0; d < num_dimensions; d++)
       if (not check_identity_term(pde, t, d))
+      {
         active_dirs.push_back(d);
+        if (d == flux_dir and active_dirs.size() > 1)
+          std::swap(active_dirs.front(), active_dirs.back());
+      }
 
-    int const num_active = static_cast<int>(active_dirs.size());
-    if (num_active > 1)
-    {
-      int const flux_dir = get_flux_direction(pde, t);
-      if (flux_dir > -1 and flux_dir != active_dirs[0]) // make the flux direction first
-        std::swap(active_dirs[0], active_dirs[flux_dir]);
-    }
-
-    permutations.push_back(kronmult::permutes(num_active));
-    permutations.back().remap_directions(active_dirs);
+    permutations.push_back(kronmult::permutes(active_dirs));
   }
 
   return global_kron_matrix<precision>(
@@ -1600,6 +1600,153 @@ void global_kron_matrix<precision>::apply(
 }
 #endif
 
+#ifdef KRON_MODE_GLOBAL_BLOCK
+
+template<typename precision>
+template<resource rec>
+void block_global_kron_matrix<precision>::apply(
+    matrix_entry etype, precision alpha, precision const *x,
+    precision beta, precision *y) const
+{
+  int const imex = flag2int(etype);
+
+  std::vector<int> const &used_terms = term_groups_[imex];
+
+  if (beta == 0)
+    kronmult::set_buffer_to_zero<rec>(num_active_, y);
+  else
+    lib_dispatch::scal<resource::host>(num_active_, beta, y, 1);
+
+  if (used_terms.size() == 0)
+    return;
+
+  std::copy_n(x, num_active_, workspace_->x.begin());
+  std::fill_n(workspace_->y.begin(), num_padded_, precision{0});
+
+  kronmult::global_cpu(num_dimensions_, blockn_, block_size_, ilist_, dsort_,
+                       perms_, flux_dir_, conn_volumes_, conn_full_,
+                       gvals_, used_terms, workspace_->x.data(),
+                       workspace_->y.data(), *workspace_);
+
+  precision const *py = workspace_->y.data();
+#pragma omp parallel for
+  for (int64_t i = 0; i < num_active_; i++)
+    y[i] += alpha * py[i];
+}
+
+template<typename precision>
+block_global_kron_matrix<precision>
+make_block_global_kron_matrix(PDE<precision> const &pde,
+                              adapt::distributed_grid<precision> const &dis_grid,
+                              options const &program_options,
+                              kronmult::block_global_workspace<precision> *workspace)
+{
+  int const porder    = pde.get_dimensions()[0].get_degree() - 1;
+  int const pterms    = porder + 1; // poly degrees of freedom
+  int const max_level = (program_options.do_adapt_levels) ? program_options.max_level : pde.max_level();
+
+  int const num_dimensions = pde.num_dims();
+  int const num_terms      = pde.num_terms();
+
+  int64_t block_size = fm::ipow(pterms, num_dimensions);
+
+  connect_1d fluxes(max_level, connect_1d::hierarchy::full);
+  connect_1d volumes(max_level, connect_1d::hierarchy::volume);
+
+  vector2d<int> cells = get_cells(num_dimensions, dis_grid);
+  int const num_cells = cells.num_strips();
+
+  indexset padded = compute_ancestry_completion(make_index_set(cells), volumes);
+  std::cout << " number of padding cells = " << padded.num_indexes() << '\n';
+
+  if (padded.num_indexes() > 0)
+    cells.append(padded[0], padded.num_indexes());
+
+  dimension_sort dsort(cells);
+
+  // figure out the permutation patterns
+  std::vector<int> flux_dir(num_terms, -1);
+  std::vector<kronmult::permutes> permutations;
+  permutations.reserve(num_terms);
+  std::vector<int> active_dirs(num_dimensions);
+  for (int t = 0; t < num_terms; t++)
+  {
+    flux_dir[t] = get_flux_direction(pde, t);
+
+    active_dirs.clear();
+    // add only the dimensions that are not identity
+    // make sure that the flux direction comes first
+    for (int d = 0; d < num_dimensions; d++)
+      if (not check_identity_term(pde, t, d))
+      {
+        active_dirs.push_back(d);
+        if (d == flux_dir[t] and active_dirs.size() > 1)
+          std::swap(active_dirs.front(), active_dirs.back());
+      }
+
+    permutations.emplace_back(active_dirs);
+  }
+
+  int64_t num_padded = cells.num_strips() * block_size;
+  workspace->x.resize(num_padded);
+  std::fill_n(workspace->x.begin(), num_padded, precision{0});
+  workspace->y.resize(num_padded);
+  workspace->w1.resize(num_padded);
+  workspace->w2.resize(num_padded);
+
+  return block_global_kron_matrix<precision>(
+      num_cells * block_size, num_padded,
+      num_dimensions, pterms, block_size,
+      std::move(cells), std::move(dsort), std::move(permutations),
+      std::move(flux_dir), std::move(volumes), std::move(fluxes),
+      workspace);
+}
+
+template<typename precision>
+void set_specific_mode(PDE<precision> const &pde,
+                       adapt::distributed_grid<precision> const &dis_grid,
+                       options const &program_options, imex_flag const imex,
+                       block_global_kron_matrix<precision> &mat)
+{
+  int const imex_indx = block_global_kron_matrix<precision>::flag2int(imex);
+
+  mat.term_groups_[imex_indx] = get_used_terms(pde, program_options, imex);
+
+  std::vector<int> const &used_terms = mat.term_groups_[imex_indx];
+
+  int const n = mat.blockn_;
+
+  int const num_dimensions = pde.num_dims();
+
+  for (int const t : used_terms)
+  {
+    for (int d = 0; d < num_dimensions; d++)
+    {
+      if (not check_identity_term(pde, t, d))
+      {
+        fk::matrix<precision> const &ops = pde.get_coefficients(t, d);
+
+        connect_1d const &conn = (mat.flux_dir_[t] == d) ? mat.conn_full_ : mat.conn_volumes_;
+
+        mat.gvals_[t * num_dimensions + d].resize(n * n * conn.num_connections());
+
+        precision *A = mat.gvals_[t * num_dimensions + d].data();
+        for (int r = 0; r < conn.num_rows(); r++)
+          for (int j = conn.row_begin(r); j < conn.row_end(r); j++)
+            for (int k = 0; k < n; k++)
+              A = std::copy_n(ops.data(r * n, conn[j] * n + k), n, A);
+      }
+    }
+  }
+
+  if (imex == imex_flag::imex_implicit or program_options.use_implicit_stepping)
+    // prepare a preconditioner
+    build_preconditioner(pde, mat.ilist_.num_strips() * mat.block_size_, dis_grid,
+                         used_terms, mat.pre_con_);
+}
+
+#endif // KRON_MODE_GLOBAL_BLOCK
+
 #ifdef ASGARD_ENABLE_DOUBLE
 template std::vector<int> get_used_terms(PDE<double> const &pde, options const &opts,
                                          imex_flag const imex);
@@ -1624,6 +1771,23 @@ template void global_kron_matrix<double>::apply<resource::host>(
 template void global_kron_matrix<double>::apply<resource::device>(
     matrix_entry, double, double const *, double, double *) const;
 #endif
+
+#ifdef KRON_MODE_GLOBAL_BLOCK
+template class block_global_kron_matrix<double>;
+template void block_global_kron_matrix<double>::apply<resource::host>(
+    matrix_entry, double, double const *, double, double *) const;
+
+template block_global_kron_matrix<double>
+make_block_global_kron_matrix<double>(PDE<double> const &,
+                                      adapt::distributed_grid<double> const &,
+                                      options const &,
+                                      kronmult::block_global_workspace<double> *workspace);
+template void set_specific_mode<double>(PDE<double> const &,
+                                        adapt::distributed_grid<double> const &,
+                                        options const &, imex_flag const,
+                                        block_global_kron_matrix<double> &);
+#endif
+
 #else // KRON_MODE_GLOBAL
 template kronmult_matrix<double>
 make_kronmult_matrix<double>(PDE<double> const &,
@@ -1666,6 +1830,24 @@ template void global_kron_matrix<float>::apply<resource::host>(
 template void global_kron_matrix<float>::apply<resource::device>(
     matrix_entry, float, float const *, float, float *) const;
 #endif
+
+#ifdef KRON_MODE_GLOBAL_BLOCK
+template class block_global_kron_matrix<float>;
+
+template void block_global_kron_matrix<float>::apply<resource::host>(
+    matrix_entry, float, float const *, float, float *) const;
+
+template block_global_kron_matrix<float>
+make_block_global_kron_matrix<float>(PDE<float> const &,
+                                     adapt::distributed_grid<float> const &,
+                                     options const &,
+                                     kronmult::block_global_workspace<float> *workspace);
+template void set_specific_mode<float>(PDE<float> const &,
+                                       adapt::distributed_grid<float> const &,
+                                       options const &, imex_flag const,
+                                       block_global_kron_matrix<float> &);
+#endif
+
 #else // KRON_MODE_GLOBAL
 template kronmult_matrix<float>
 make_kronmult_matrix<float>(PDE<float> const &,

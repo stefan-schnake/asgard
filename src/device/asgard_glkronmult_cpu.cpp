@@ -172,6 +172,7 @@ void global_cpu(int num_dimensions,
       int dir = perm.direction[i][0];
       global_cpu_one(perm.fill[i][0], num_rows, gpntr[dir], gindx[dir],
                      gdiag[dir], gvals[t * num_dimensions + dir], x, w1);
+
       for (int d = 1; d < dims; d++)
       {
         dir = perm.direction[i][d];
