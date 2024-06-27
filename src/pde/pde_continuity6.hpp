@@ -27,7 +27,7 @@ class PDE_continuity_6d : public PDE<P>
 public:
   PDE_continuity_6d(parser const &cli_input)
       : PDE<P>(cli_input, num_dims_, num_sources_, num_terms_, dimensions_,
-               terms_, sources_, exact_vector_funcs_, exact_scalar_func_,
+               terms_, sources_, exact_vector_funcs_,
                get_dt_, do_poisson_solve_, has_analytic_soln_)
   {}
 
@@ -124,19 +124,17 @@ private:
     return fx;
   }
 
-  static P exact_time(P const time) { return std::sin(targ * time); }
-
-  static fk::vector<P> exact_time_v(fk::vector<P> x, P const time)
+  static fk::vector<P> exact_time(fk::vector<P>, P const time)
   {
-    x.resize(1);
-    x[0] = exact_time(time);
-    return x;
+    return {
+        std::sin(targ * time),
+    };
   }
 
   // define exact soln
   inline static std::vector<vector_func<P>> const exact_vector_funcs_ = {
       exact_solution_x, exact_solution_y, exact_solution_z,
-      exact_solution_vx, exact_solution_vy, exact_solution_vz, exact_time_v};
+      exact_solution_vx, exact_solution_vy, exact_solution_vz, exact_time};
 
   // specify source functions...
 
@@ -797,7 +795,5 @@ private:
   /* this corresponds to the aggregation of TERM_ND objects in matlab */
   inline static term_set<P> const terms_ = {terms0_, terms1_, terms2_,
                                             terms3_, terms4_, terms5_};
-
-  inline static scalar_func<P> const exact_scalar_func_ = exact_time;
 };
 } // namespace asgard
