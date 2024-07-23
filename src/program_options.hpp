@@ -212,7 +212,7 @@ public:
 
   static auto constexpr DEFAULT_CFL               = 0.01;
   static auto constexpr DEFAULT_ADAPT_THRESH      = 1e-3;
-  static auto constexpr DEFAULT_MAX_LEVEL         = 8;
+  static auto constexpr DEFAULT_MAX_LEVEL         = -1;
   static auto constexpr DEFAULT_MIXED_GRID_GROUP  = -1;
   static auto constexpr DEFAULT_TIME_STEPS        = 10;
   static auto constexpr DEFAULT_WRITE_FREQ        = 0;
@@ -270,7 +270,11 @@ public:
         kmode(kmode_in), gmres_tolerance(gmres_tolerance_in),
         gmres_inner_iterations(gmres_inner_iterations_in),
         gmres_outer_iterations(gmres_outer_iterations_in),
-        max_adapt_levels(max_adapt_levels_in), restart_file(restart_file_in){};
+        max_adapt_levels(max_adapt_levels_in), restart_file(restart_file_in)
+  {
+    for (auto l : starting_levels_in)
+      max_level = std::max(max_level, l);
+  }
 
   explicit parser(
       std::string const &pde_choice_in, fk::vector<int> starting_levels_in,
