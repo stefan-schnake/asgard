@@ -32,6 +32,7 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "build_info.hpp"
@@ -42,8 +43,7 @@
 #endif
 
 // simple profiling object
-// this is NOT thread safe for now - only one thread should be calling class
-// funcs at a time, if we need this, just need to wrap map access with locks
+// this is NOT thread safe
 namespace asgard::tools
 {
 #ifndef NDEBUG
