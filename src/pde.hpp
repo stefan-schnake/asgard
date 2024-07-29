@@ -54,8 +54,18 @@ namespace asgard
 //
 // ---------------------------------------------------------------------------
 
-template<typename P>
+template<typename pde_class>
+auto make_custom_pde(parser const &cli_input)
+{
+  static_assert(std::is_base_of_v<PDE<float>, pde_class> or std::is_base_of_v<PDE<double>, pde_class>,
+                "the requested PDE class must inherit from the asgard::PDE base-class");
 
+  using precision = typename pde_class::precision_mode;
+
+  return std::unique_ptr<PDE<precision>>(std::make_unique<pde_class>(cli_input));
+}
+
+template<typename P>
 std::unique_ptr<PDE<P>> make_PDE(parser const &cli_input)
 {
   switch (cli_input.get_selected_pde())
