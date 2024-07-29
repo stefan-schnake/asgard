@@ -222,7 +222,7 @@ void simulate(parser const &cli_input, std::unique_ptr<PDE<precision>> &pde)
   for (auto i = start_step; i < opts.num_time_steps; ++i)
   {
     // take a time advance step
-    auto const time          = (i + 1) * pde->get_dt();
+    auto const time          = i * pde->get_dt();
     auto const update_system = i == 0;
     auto const method =
         opts.use_implicit_stepping
@@ -250,17 +250,8 @@ void simulate(parser const &cli_input, std::unique_ptr<PDE<precision>> &pde)
           transformer, degree, time + pde->get_dt());
 
       // calculate root mean squared error
-      auto const RMSE = [&]() {
-        precision s{0};
-        for (int j = 0; j < f_val.size(); j++)
-        {
-          precision const d = f_val[j] - analytic_solution[j];
-          s += d * d;
-        }
-        return std::sqrt(s / f_val.size());
-      }();
-      auto const relative_error =
-          RMSE / inf_norm(analytic_solution) * 100;
+      auto const RMSE = fm::rmserr(f_val, analytic_solution);
+      auto const relative_error = 100 * RMSE  / fm::nrminf(analytic_solution);
       auto const [rmse_errors, relative_errors] =
           gather_errors<precision>(RMSE, relative_error);
       expect(rmse_errors.size() == relative_errors.size());
@@ -314,14 +305,13 @@ void simulate(parser const &cli_input, std::unique_ptr<PDE<precision>> &pde)
 #ifdef ASGARD_IO_HIGHFIVE
     if (opts.should_output_wavelet(i))
     {
-      write_output(*pde, cli_input, f_val, time, i + 1, f_val.size(),
-                   adaptive_grid.get_table(), "asgard_wavelet");
+      write_output(*pde, cli_input, f_val, time + pde->get_dt(), i + 1,
+                   f_val.size(), adaptive_grid.get_table(), "asgard_wavelet");
     }
     if (opts.should_output_realspace(i))
     {
-      write_output(*pde, cli_input, real_space, time, i + 1,
-                   f_val.size(), adaptive_grid.get_table(),
-                   "asgard_real");
+      write_output(*pde, cli_input, real_space, time + pde->get_dt(), i + 1,
+                   f_val.size(), adaptive_grid.get_table(), "asgard_real");
     }
 #endif
 
@@ -366,7 +356,7 @@ void simulate(parser const &cli_input, std::unique_ptr<PDE<precision>> &pde)
         ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, n_nodes);
         ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, u_nodes);
         ml_plot.add_param({1, static_cast<size_t>(nodes.size())}, th_nodes);
-        ml_plot.add_param(time);
+        ml_plot.add_param(time + pde->get_dt());
         ml_plot.call("vlasov_params");
       }
     }
