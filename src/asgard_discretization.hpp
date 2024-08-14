@@ -1,16 +1,16 @@
 #pragma once
 #include "asgard_reconstruct.hpp"
-#include "boundary_conditions.hpp"
-#include "coefficients.hpp"
-#include "moment.hpp"
-#include "solver.hpp"
+#include "asgard_boundary_conditions.hpp"
+#include "asgard_coefficients.hpp"
+#include "asgard_moment.hpp"
+#include "asgard_solver.hpp"
 
 #ifdef ASGARD_IO_HIGHFIVE
 #include "asgard_io.hpp"
 #endif
 
 #ifdef ASGARD_USE_MATLAB
-#include "matlab_plot.hpp"
+#include "asgard_matlab_plot.hpp"
 #endif
 
 namespace asgard

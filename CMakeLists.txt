@@ -373,34 +373,34 @@ endif()
 
 target_compile_features (libasgard PUBLIC cxx_std_17)
 set (components
-     adapt
-     batch
-     boundary_conditions
-     coefficients
-     distribution
-     elements
-     fast_math
-     lib_dispatch
-     matlab_utilities
-     moment
-     permutations
-     program_options
-     quadrature
-     solver
-     tensors
-     sparse
-     transformations
+     asgard_adapt
      asgard_basis
+     asgard_batch
+     asgard_boundary_conditions
+     asgard_coefficients
+     asgard_distribution
      asgard_discretization
+     asgard_elements
+     asgard_fast_math
      asgard_indexset
      asgard_interpolation1d
      asgard_interpolation
      asgard_kronmult_matrix
+     asgard_lib_dispatch
+     asgard_matlab_utilities
+     asgard_moment
      asgard_pde
+     asgard_permutations
+     asgard_program_options
+     asgard_quadrature
      asgard_reconstruct
      asgard_resources
+     asgard_sparse
+     asgard_solver
+     asgard_tensors
      asgard_time_advance
      asgard_tools
+     asgard_transformations
 )
 
 if (ASGARD_IO_HIGHFIVE)
@@ -408,11 +408,11 @@ if (ASGARD_IO_HIGHFIVE)
 endif ()
 
 if (ASGARD_USE_SCALAPACK)
-    list (APPEND components scalapack_matrix_info scalapack_vector_info cblacs_grid)
+    list (APPEND components asgard_scalapack_matrix_info asgard_scalapack_vector_info asgard_cblacs_grid)
 endif ()
 
 if (ASGARD_USE_MATLAB)
-    list(APPEND components matlab_plot)
+    list(APPEND components asgard_matlab_plot)
 endif ()
 
 foreach (component IN LISTS components)
@@ -443,21 +443,21 @@ target_sources (libasgard
 target_precompile_headers (libasgard
                            PUBLIC
                            $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/asgard_build_info.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_base.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_advection1.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_continuity1.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_continuity2.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_continuity3.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_continuity6.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_diffusion1.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_diffusion2.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck1_4p3.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck1_4p4.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck1_4p5.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck1_pitch_C.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck1_pitch_E.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_fokkerplanck2_complete.hpp>>
-                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/pde_vlasov_lb_full_f.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_base.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_advection1.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_continuity1.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_continuity2.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_continuity3.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_continuity6.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_diffusion1.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_diffusion2.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck1_4p3.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck1_4p4.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck1_4p5.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck1_pitch_C.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck1_pitch_E.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_fokkerplanck2_complete.hpp>>
+                           $<$<BOOL:${ASGARD_USE_PCH}>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/pde/asgard_pde_vlasov_lb_full_f.hpp>>
 )
 target_link_libraries (libasgard
                        PUBLIC
