@@ -1,4 +1,3 @@
-
 #include "tests_general.hpp"
 
 #include "asgard_kronmult_tests.hpp"
