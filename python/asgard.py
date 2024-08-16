@@ -1,8 +1,15 @@
+import sys
 
 from ctypes import c_char_p, c_int, c_int64, c_double, c_float, c_void_p, POINTER, CDLL, create_string_buffer, RTLD_GLOBAL
 import numpy as np
 
 import h5py # required for now, maybe add lighter module later
+
+_matplotlib_found_ = True
+try:
+    import matplotlib.pyplot as asgplot
+except:
+    _matplotlib_found_ = False
 
 from asgard_config import __version__, __author__, __pyasgard_libasgard_path__
 
@@ -15,6 +22,8 @@ libasgard.asgard_make_dreconstruct_solution.argtypes = [c_int, c_int64, POINTER(
 libasgard.asgard_make_freconstruct_solution.argtypes = [c_int, c_int64, POINTER(c_int), c_int, POINTER(c_float)]
 
 libasgard.asgard_pydelete_reconstruct_solution.argtypes = [c_void_p, ]
+
+libasgard.asgard_print_version_help.argtypes = []
 
 libasgard.asgard_reconstruct_solution_setbounds.argtypes = [c_void_p, POINTER(c_double), POINTER(c_double)]
 libasgard.asgard_reconstruct_solution.argtypes = [c_void_p, POINTER(c_double), c_int, POINTER(c_double)]
@@ -52,15 +61,17 @@ class pde_snapshot:
             self.num_dimensions = fdata['ndims'][()]
             self.degree         = fdata['degree'][()]
 
-            self.state = fdata['soln'][()]
+            self.state = fdata['state'][()]
             self.cells = fdata['elements'][()]
             self.time  = fdata['time'][()]
 
             self.num_cells = int(len(self.cells) / (2 * self.num_dimensions))
 
+            self.dimension_names = [None for i in range(self.num_dimensions)]
             self.dimension_min = np.zeros((self.num_dimensions,))
             self.dimension_max = np.zeros((self.num_dimensions,))
             for i in range(self.num_dimensions):
+                self.dimension_names[i] = fdata['dim{0}_name'.format(i)][()].decode("utf-8")
                 self.dimension_min[i] = fdata['dim{0}_min'.format(i)][()]
                 self.dimension_max[i] = fdata['dim{0}_max'.format(i)][()]
 
@@ -70,7 +81,7 @@ class pde_snapshot:
 
         if self.verbose:
             if self.state.dtype == np.float64:
-                print('using double precisoin data (double) - 64-bit')
+                print('using double precision data (double) - 64-bit')
             else:
                 print('using single precision data (float) - 32-bit')
             print('dimensions:  {0}'.format(self.num_dimensions))
@@ -202,6 +213,16 @@ class pde_snapshot:
         return self.evaluate(pgrid).reshape(XX.shape), XX, YY
 
     def evaluate(self, points):
+        '''
+        points must be a 2d numpy array with shape (num_x, num_dimensions)
+        where the num_x is the number of points for the evaluate command
+
+        each row must describe a point inside the domain, but no checking will
+        be performed
+
+        returns a vector with the size num_x holding the corresponding values
+        of the field
+        '''
         assert len(points.shape) == 2, 'points must be a 2d numpy array with num-columns equal to self.num_dimensions'
         assert points.shape[1] == self.num_dimensions, 'points.shape[1] (%d) must be equal to self.num_dimensions (%d)' % (points.shape[1], self.num_dimensions)
 
@@ -213,6 +234,13 @@ class pde_snapshot:
         return presult
 
     def cell_centers(self):
+        '''
+        returns the geometric centers of the sparse grid cells
+
+        do not attempt to plot at these points as they are set right on the
+        the discontinuities of the basis functions and the evaluate()
+        algorithm may be unstable due to rounding error
+        '''
         presult = np.empty((self.num_cells, self.num_dimensions), np.float64)
 
         libasgard.asgard_reconstruct_cell_centers(self.recsol,
@@ -229,3 +257,54 @@ class pde_snapshot:
         s += "  degree:         %d\n" % self.degree
         s += "  time:           %f" % self.time
         return s
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        libasgard.asgard_print_version_help()
+    elif sys.argv[1] in ("-s", "-stat", "-stats", "-summary"):
+        if len(sys.argv) < 3:
+            print("stats summary option requires a filename")
+        else:
+            shot = pde_snapshot(sys.argv[2])
+            print("\n", shot, "\n")
+    elif not _matplotlib_found_:
+        print("could not 'import matplotlib'")
+        print("to print only stats summary use")
+        print("  python3 -m asgard -s %s" % sys.argv[2])
+        libasgard.asgard_print_version_help()
+    else:
+        shot = pde_snapshot(sys.argv[1])
+        print("\n", shot, "\n")
+
+        asgplot.title(shot.title, fontsize = 'large')
+
+        if shot.num_dimensions == 1:
+            z, x = shot.plot_data1d((()), num_points = 256)
+            asgplot.plot(x, z)
+            asgplot.xlabel(shot.dimension_names[0], fontsize = 'large')
+        else:
+            plist = [(), ()]
+            for i in range(2, shot.num_dimensions):
+                plit.append(0.49 * (shot.dimension_max[i] + shot.dimension_min[i]))
+
+            z, x, y = shot.plot_data2d(plist, num_points = 256)
+
+            xmin = shot.dimension_min[0]
+            ymin = shot.dimension_min[1]
+            xmax = shot.dimension_max[0]
+            ymax = shot.dimension_max[1]
+
+            p = asgplot.imshow(z, cmap='jet', extent=[xmin, xmax, ymin, ymax])
+
+            asgplot.colorbar(p, orientation='vertical')
+
+            asgplot.gca().set_anchor('C')
+
+            asgplot.xlabel(shot.dimension_names[0], fontsize='large')
+            asgplot.ylabel(shot.dimension_names[1], fontsize='large')
+
+        if len(sys.argv) > 2:
+            asgplot.savefig(sys.argv[2])
+        else:
+            asgplot.show()
+
