@@ -122,6 +122,14 @@ public:
   template<int missing_dim = -1>
   vector2d<P> const &nodes(sparse_grid const &grid, vector2d<P> &vnodes) const;
 
+  //! constructs a non-owning tensor-product view of the grid nodes
+  tensor_nodes<P> tensor_node_view(sparse_grid const &grid, int const missing_dim = -1) const
+  {
+    return tensor_nodes<P>(grid.num_dims(), pdof, grid.num_indexes(),
+                           grid.iset().indexes().data(), nodes1d_.data(),
+                           xmin.data(), xscale.data(), missing_dim);
+  }
+
   //! compute nodal values for the field
   void wav2nodal(sparse_grid const &grid, P const f[], P vals[],
                  kronmult::workspace<P> &work) const
@@ -356,30 +364,20 @@ public:
   }
 
   template<typename tmd_type>
-  void eval_posonly_with_idx
+  void eval_moment_source
       (interpolation_plan const &plan, sparse_grid const &grid,
        connection_patterns const &conn, momentset<P> const &moments,
        P time, P alpha, tmd_type const &func, P beta, P y[],
        kronmult::workspace<P> &work) const
   {
     assert(plan.is_enabled());
-
-    size_t const block_size = static_cast<size_t>(grid.block_size());
-    size_t const nentries = static_cast<size_t>(grid.num_indexes()) * block_size;
-
-    // Must size buffers BEFORE callback writes into them
-    it1.assign(nentries, P{0}); // or resize(nentries) if you prefer
+    size_t const nentries = static_cast<size_t>(grid.num_dof());
+    it1.resize(nentries);
     it2.resize(nentries);
     {
       tools::time_event perf_("interpolation source");
-      func(time, nodes(grid), moments, grid.iset().indexes(), it1);
+      func(time, tensor_node_view(grid), moments, grid.iset().indexes(), it1);
     }
-
-    // // Enforce callback contract (no resizing)
-    // if (it1.size() != nentries)
-    //   throw std::runtime_error("source callback resized vals (it1); this is not allowed");
-    // if (it2.size() != nentries)
-    //   throw std::runtime_error("internal error: it2 wrong size");
     if (plan.uses_hybrid())
       pos2wav(grid, conn, alpha, it1.data(), beta, y, work, it2);
     else

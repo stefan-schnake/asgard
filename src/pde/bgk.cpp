@@ -287,14 +287,19 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
     asgard::moment_id im1 = pde.register_moment(asgard::moment(1));
     asgard::moment_id im2 = pde.register_moment(asgard::moment(2));
 
-    auto fbgk = [=](P /* time */, asgard::vector2d<P> const &nodes,
+    auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, std::vector<P> &vals)
     {
       std::vector<P> const &m0 = moments[im0];
       std::vector<P> const &m1 = moments[im1];
       std::vector<P> const &m2 = moments[im2];
 
-      int64_t const num_nodes = nodes.num_strips();
+      int64_t const num_nodes = [&]() {
+        if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+          return nodes.num_points();
+        else
+          return nodes.num_strips();
+      }();
       assert(vals.size() == static_cast<size_t>(num_nodes));
       assert(m0.size() == static_cast<size_t>(num_nodes));
       assert(m1.size() == static_cast<size_t>(num_nodes));
@@ -302,7 +307,12 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
       #pragma omp parallel for
       for (int64_t i = 0; i < num_nodes; i++) {
         // P const x = nodes[i][0]; // no explicit spatial dependence
-        P const v = nodes[i][1];
+        P const v = [&]() {
+          if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+            return nodes.coordinate(i, 1);
+          else
+            return nodes[i][1];
+        }();
 
         P const n = m0[i];
         P const u = m1[i] / m0[i];
@@ -352,7 +362,7 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
 
     std::vector<asgard::moment_id> const mids = {im0, im10, im01, im20, im02};
 
-    auto fbgk = [=](P /* time */, asgard::vector2d<P> const &nodes,
+    auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, std::vector<P> &vals)
     {
       std::vector<P> const &m0 = moments[im0];
@@ -361,7 +371,12 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
       std::vector<P> const &m20 = moments[im20];
       std::vector<P> const &m02 = moments[im02];
 
-      int64_t const num_nodes = nodes.num_strips();
+      int64_t const num_nodes = [&]() {
+        if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+          return nodes.num_points();
+        else
+          return nodes.num_strips();
+      }();
       #pragma omp parallel for
       for (int64_t i = 0; i < num_nodes; i++) {
         P const n = m0[i];
@@ -370,8 +385,18 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
         P const t = 0.5 * ((m20[i] + m02[i]) / m0[i] - u0 * u0 - u1 * u1);
 
         vals[i] = nu * n / (2 * PI * t);
-        P const vu0 = nodes[i][2] - u0;
-        P const vu1 = nodes[i][3] - u1;
+        P const vu0 = [&]() {
+          if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+            return nodes.coordinate(i, 2) - u0;
+          else
+            return nodes[i][2] - u0;
+        }();
+        P const vu1 = [&]() {
+          if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+            return nodes.coordinate(i, 3) - u1;
+          else
+            return nodes[i][3] - u1;
+        }();
         P const d = vu0 * vu0 + vu1 * vu1;
         vals[i] *= std::exp(- P{0.5} * d / t);
       }

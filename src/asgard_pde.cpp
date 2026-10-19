@@ -528,7 +528,7 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
       fbgk(num, time, nodes, moments, vals);
     };
     #else
-    auto fbgk = [=](P /* time */, asgard::vector2d<P> const &,
+    auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, 
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)
@@ -537,42 +537,29 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
       std::vector<P> const &m1 = moments[im1];
       std::vector<P> const &m2 = moments[im2];
 
+      int64_t const num_points = [&]() {
+        if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+          return nodes.num_points();
+        else
+          return nodes.num_strips();
+      }();
+      assert(vals.size() == static_cast<size_t>(num_points));
       #pragma omp parallel
       {
-
-        std::vector<P> mulout1(dp1,0.0);
-        std::vector<P>  mulin1(dp1,0.0);
-
+        std::vector<P> mulout1(dp1, P{0});
+        std::vector<P> mulin1(dp1, P{0});
         #pragma omp for
-        for (int64_t i = 0; i < static_cast<std::int64_t>(indexes.size()/domain_.num_dims()); i++)
-        {
-          // Loop over polynomial x dof in element
-          for (int64_t poly_x1 = 0; poly_x1 < dp1; poly_x1++)
-          {
-            // Get index starting point of cell in this coordinate for x1,x2
-            int64_t const idx_start = (i*dp1 + poly_x1)*dp1;
-
-            // Get fluid variables that given on points in (x,v).  The v coordinate doesnt matter
-            P const n  = m0[idx_start];
-            P const u1 = m1[idx_start] / m0[idx_start];
-            P const t  = m2[idx_start] / m0[idx_start] - u1 * u1;
-
-            // Need v index
-            int64_t const v1_idx = indexes[2*i+1];
-
-            // Get level and position of current index
-            int64_t const v1_lev = int64_t(std::ceil(std::log2(v1_idx+1)));
-            int64_t const v1_pos = (v1_lev == 0) ? 0 : v1_idx - (1 << (v1_lev-1)); // v_idx - 2^(v_lev-1)
-
-            // Calculate 1D analytic maxwellian
-            wavelet_maxwell(v1_lev,v1_pos,dp1,domain_.xleft(1),domain_.xright(1),u1,t,mulin1,mulout1);
-
-            // Take kroneckor product and store
-            for (int poly_v1 = 0; poly_v1 < dp1; poly_v1++)
-            {
-              vals[idx_start + poly_v1] = nu*n*mulout1[poly_v1];
-            }
-          }
+        for (int64_t i = 0; i < num_points; ++i) {
+          int const velocity_index = indexes[(i / (dp1 * dp1)) * domain_.num_dims() + domain_.num_pos()];
+          int64_t const v1_lev = int64_t(std::ceil(std::log2(velocity_index + 1)));
+          int64_t const v1_pos = (v1_lev == 0) ? 0 : velocity_index - (int64_t{1} << (v1_lev - 1));
+          P const n = m0[i];
+          P const u1 = m1[i] / n;
+          P const t = m2[i] / n - u1 * u1;
+          wavelet_maxwell(v1_lev, v1_pos, dp1, domain_.xleft(1), domain_.xright(1),
+                          u1, t, mulin1, mulout1);
+          int64_t const poly_v1 = i % dp1;
+          vals[i] = nu * n * mulout1[poly_v1];
         }
       }
     };
@@ -612,7 +599,7 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
       fbgk(num, time, nodes, moments, vals);
     };
     #else
-    auto fbgk = [=](P /* time */, asgard::vector2d<P> const &,
+    auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, 
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)
@@ -623,52 +610,35 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
       std::vector<P> const &m20 = moments[im20];
       std::vector<P> const &m02 = moments[im02];
 
+      int64_t const num_points = [&]() {
+        if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
+          return nodes.num_points();
+        else
+          return nodes.num_strips();
+      }();
+      assert(vals.size() == static_cast<size_t>(num_points));
       #pragma omp parallel
       {
-
-        std::vector<P> mulout1(dp1,0.0);
-        std::vector<P>  mulin1(dp1,0.0);
-        std::vector<P> mulout2(dp1,0.0);
-        std::vector<P>  mulin2(dp1,0.0);
-
+        std::vector<P> mulout1(dp1, P{0}), mulin1(dp1, P{0});
+        std::vector<P> mulout2(dp1, P{0}), mulin2(dp1, P{0});
         #pragma omp for
-        for (int64_t i = 0; i < static_cast<std::int64_t>(indexes.size()/domain_.num_dims()); i++)
-        {
-          // Loop over polynomial x dof in element
-          for (int64_t poly_x1 = 0; poly_x1 < dp1; poly_x1++)
-            for (int64_t poly_x2 = 0; poly_x2 < dp1; poly_x2++)
-            {
-              // Get index starting point of cell in this coordinate for x1,x2
-              int64_t const idx_start = (i*dp1*dp1 + poly_x1*dp1 + poly_x2)*dp1*dp1;
-
-              // Get fluid variables that given on points in (x,v).  The v coordinate doesnt matter
-              P const n  = m0[idx_start];
-              P const u1 = m10[idx_start] / m0[idx_start];
-              P const u2 = m01[idx_start] / m0[idx_start];
-              P const t  =  (1.0/2.0) * ((m20[idx_start] + m02[idx_start]) / m0[idx_start] - u1 * u1 - u2 * u2);
-
-              // Need v index
-              int64_t const v1_idx = indexes[4*i+2];
-              int64_t const v2_idx = indexes[4*i+3];
-
-              // Get level and position of current index
-              int64_t const v1_lev = int64_t(std::ceil(std::log2(v1_idx+1)));
-              int64_t const v1_pos = (v1_lev == 0) ? 0 : v1_idx - (1 << (v1_lev-1)); // v_idx - 2^(v_lev-1)
-
-              int64_t const v2_lev = int64_t(std::ceil(std::log2(v2_idx+1)));
-              int64_t const v2_pos = (v2_lev == 0) ? 0 : v2_idx - (1 << (v2_lev-1)); // v_idx - 2^(v_lev-1)
-
-              // Calculate 1D analytic maxwellian
-              wavelet_maxwell(v1_lev,v1_pos,dp1,domain_.xleft(2),domain_.xright(2),u1,t,mulin1,mulout1);
-              wavelet_maxwell(v2_lev,v2_pos,dp1,domain_.xleft(3),domain_.xright(3),u2,t,mulin2,mulout2);
-
-              // Take kroneckor product and store
-              for (int poly_v1 = 0; poly_v1 < dp1; poly_v1++)
-                for (int poly_v2 = 0; poly_v2 < dp1; poly_v2++)
-                {
-                  vals[idx_start + poly_v1*dp1 + poly_v2] = nu*n*mulout1[poly_v1]*mulout2[poly_v2];
-                }
-            }
+        for (int64_t i = 0; i < num_points; ++i) {
+          int64_t const block = i / (dp1 * dp1 * dp1 * dp1);
+          int const *idx = indexes.data() + block * domain_.num_dims();
+          int64_t const v1_lev = int64_t(std::ceil(std::log2(idx[domain_.num_pos()] + 1)));
+          int64_t const v1_pos = (v1_lev == 0) ? 0 : idx[domain_.num_pos()] - (int64_t{1} << (v1_lev - 1));
+          int64_t const v2_lev = int64_t(std::ceil(std::log2(idx[domain_.num_pos() + 1] + 1)));
+          int64_t const v2_pos = (v2_lev == 0) ? 0 : idx[domain_.num_pos() + 1] - (int64_t{1} << (v2_lev - 1));
+          P const n = m0[i];
+          P const u1 = m10[i] / n, u2 = m01[i] / n;
+          P const t = P{0.5} * ((m20[i] + m02[i]) / n - u1 * u1 - u2 * u2);
+          wavelet_maxwell(v1_lev, v1_pos, dp1, domain_.xleft(2), domain_.xright(2), u1, t, mulin1, mulout1);
+          wavelet_maxwell(v2_lev, v2_pos, dp1, domain_.xleft(3), domain_.xright(3), u2, t, mulin2, mulout2);
+          int64_t const local = i % (dp1 * dp1 * dp1 * dp1);
+          int const pv1 = static_cast<int>(local / dp1) % dp1;
+          int const pv2 = static_cast<int>(local % dp1);
+          // The Maxwellian is a tensor product over velocity polynomial modes.
+          vals[i] = nu * n * mulout1[pv1] * mulout2[pv2];
         }
       }
     };
@@ -710,7 +680,7 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
       fbgk(num, time, nodes, moments, vals);
     };
     #else
-    auto fbgk = [=](P /* time */, asgard::vector2d<P> const &,
+    auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, 
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)

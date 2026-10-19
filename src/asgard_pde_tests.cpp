@@ -503,7 +503,7 @@ void test_pde_class() {
   }
 
   auto mom  = [](TestType, vector2d<TestType> const &, std::vector<TestType> &) -> void {};
-  auto momf = [](TestType, vector2d<TestType> const &, momentset<TestType> const &,
+  auto momf = [](TestType, tensor_nodes<TestType> const &, momentset<TestType> const &,
                  std::vector<TestType> &) -> void {};
 
   {

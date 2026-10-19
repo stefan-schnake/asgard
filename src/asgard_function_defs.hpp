@@ -42,6 +42,82 @@
 namespace asgard
 {
 /*!
+ * \brief Compact tensor-product coordinates for an interpolation source.
+ *
+ * Each sparse-grid index selects one 1D node set in every dimension. The
+ * points inside that block are the tensor product of those sets; coordinates
+ * are decoded on demand and are never stored per phase-space point.
+ * The view references the interpolation manager's 1D nodes and the grid's
+ * index table, so it must not outlive either object.
+ */
+template<typename P>
+class tensor_nodes
+{
+public:
+  tensor_nodes() = default;
+
+  tensor_nodes(int const num_dims, int const pdof, int64_t const num_blocks,
+               int const *indexes, P const *nodes1d,
+               P const *xmin, P const *xscale, int const missing_dim = -1)
+      : num_dims_(num_dims), pdof_(pdof), num_blocks_(num_blocks),
+        indexes_(indexes), nodes1d_(nodes1d), xmin_(xmin), xscale_(xscale),
+        missing_dim_(missing_dim)
+  {
+    block_size_ = 1;
+    for (int d = 0; d < num_dims_; ++d)
+      block_size_ *= pdof_;
+  }
+
+  int num_dims() const { return num_dims_; }
+  int pdof() const { return pdof_; }
+  int64_t num_blocks() const { return num_blocks_; }
+  int64_t block_size() const { return block_size_; }
+  int64_t num_points() const { return num_blocks_ * block_size_; }
+  int const *indexes() const { return indexes_; }
+
+  //! Fill one coordinate tuple in the same dimension order as vector2d.
+  void coordinates(int64_t point, P out[]) const
+  {
+    assert(point >= 0 and point < num_points());
+    for (int d = 0; d < num_dims_; ++d)
+      out[d] = coordinate(point, d);
+  }
+
+  //! Return the coordinate for a point in the flat block-major point ordering.
+  P coordinate(int64_t point, int const dim) const
+  {
+    assert(point >= 0 and point < num_points());
+    assert(dim >= 0 and dim < num_dims_);
+    int64_t const block = point / block_size_;
+    int64_t local = point % block_size_;
+    int const digit = static_cast<int>(local / stride(dim)) % pdof_;
+    P x = nodes1d_[static_cast<int64_t>(indexes_[block * num_dims_ + dim]) * pdof_ + digit];
+    if (dim != missing_dim_)
+      x = xmin_[dim] + x * xscale_[dim];
+    return x;
+  }
+
+private:
+  int64_t stride(int const dim) const
+  {
+    int64_t s = 1;
+    for (int d = dim + 1; d < num_dims_; ++d)
+      s *= pdof_;
+    return s;
+  }
+
+  int num_dims_;
+  int pdof_;
+  int64_t num_blocks_;
+  int64_t block_size_ = 0;
+  int const *indexes_;
+  P const *nodes1d_;
+  P const *xmin_;
+  P const *xscale_;
+  int missing_dim_;
+};
+
+/*!
  * \ingroup asgard_funcdef
  * \brief Scalar function, returning y = F(t)
  *
@@ -133,7 +209,7 @@ using md_func_f = std::function<void(P t, vector2d<P> const &x, std::vector<P> c
  * See \ref asgard_examples_bgk "BGK example" for details.
  */
 template<typename P>
-using md_mom_func = std::function<void(P t, vector2d<P> const &x, momentset<P> const &moments, std::vector<P> &fx)>;
+using md_mom_func = std::function<void(P t, tensor_nodes<P> const &x, momentset<P> const &moments, std::vector<P> &fx)>;
 
 /*!
  * \ingroup asgard_funcdef
@@ -147,7 +223,7 @@ using md_mom_func = std::function<void(P t, vector2d<P> const &x, momentset<P> c
  * See \ref asgard_examples_bgk "BGK example" for details.
  */
 template<typename P>
-using md_mom_and_idx_func = std::function<void(P t, vector2d<P> const &x, momentset<P> const &moments, std::vector<int> const &indexes, std::vector<P> &fx)>;
+using md_mom_and_idx_func = std::function<void(P t, tensor_nodes<P> const &x, momentset<P> const &moments, std::vector<int> const &indexes, std::vector<P> &fx)>;
 
 /*!
  * \ingroup asgard_funcdef
@@ -209,6 +285,7 @@ using md_gpu_mom_func_f = std::function<void(int64_t const num, P t, P const x[]
 //! variant holding any of the possible multidimensional source functions
 template<typename P>
 using md_source_func = std::variant<std::monostate, md_func<P>, md_mom_func<P>, md_mom_and_idx_func<P>, md_gpu_func<P>, md_gpu_mom_func<P>>;
+
 //! variant holding any of the possible multidimensional field functions
 template<typename P>
 using md_field_func = std::variant<std::monostate, md_func_f<P>, md_mom_func_f<P>, md_gpu_func_f<P>, md_gpu_mom_func_f<P>>;
