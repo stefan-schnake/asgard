@@ -610,11 +610,12 @@ void sparse_grid::refine(connect_1d const &hierarchy, strategy mode, std::vector
 }
 
 template<typename P>
-void sparse_grid::remap(int block_size, std::vector<P> &state) const
+void sparse_grid::remap(int block_size, std::vector<P> &state, double growth_scale) const
 {
   int64_t const num = iset_.num_indexes();
 
-  std::vector<P> snew(num * block_size);
+  std::vector<P> snew;
+  tools::resize_with_growth(snew, static_cast<size_t>(num * block_size), growth_scale);
 
   span2d<P> old_state(block_size, state);
   span2d<P> new_state(block_size, snew);
@@ -774,8 +775,8 @@ template indexset sparse_grid::make_level_set<grid_type::dense>(std::vector<int>
 template indexset sparse_grid::make_level_set<grid_type::sparse>(std::vector<int> const &);
 template indexset sparse_grid::make_level_set<grid_type::mixed>(std::vector<int> const &);
 
-template void sparse_grid::remap<double>(int, std::vector<double> &) const;
-template void sparse_grid::remap<float>(int, std::vector<float> &) const;
+template void sparse_grid::remap<double>(int, std::vector<double> &, double) const;
+template void sparse_grid::remap<float>(int, std::vector<float> &, double) const;
 
 #ifdef ASGARD_USE_GPU
 template void sparse_grid::remap<double>(int, gpu::vector<double> &) const;

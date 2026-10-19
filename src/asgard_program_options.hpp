@@ -370,6 +370,8 @@ struct prog_opts
 
   //! restart the simulation from a file
   std::string restart_file;
+  //! capacity multiplier when large CPU vectors grow; defaults to 2x
+  double vector_growth_scale = 2.0;
   //! filename for the last time step
   std::filesystem::path outfile;
 
@@ -679,6 +681,7 @@ private:
     isol_iterations,
     isol_inner_iterations,
     restart_file,
+    vector_growth,
     view,
     set_verbosity,
     safe_step,

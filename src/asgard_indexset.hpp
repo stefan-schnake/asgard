@@ -602,7 +602,7 @@ public:
 
   //! remaps the vector entries from an old grid to the new one, pads with zero
   template<typename P>
-  void remap(int block_size, std::vector<P> &state) const;
+  void remap(int block_size, std::vector<P> &state, double growth_scale = 2.0) const;
 
   #ifdef ASGARD_USE_GPU
   //! gpu remap, good for single remap, not good for multiple remaps in a row

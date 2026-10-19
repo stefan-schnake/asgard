@@ -57,6 +57,23 @@
 
 namespace asgard::tools
 {
+
+//! Resize a vector while reserving a configurable multiple of the requested size.
+template<typename T>
+void resize_with_growth(std::vector<T> &values, size_t new_size, double scale)
+{
+  if (new_size > values.capacity()) {
+    if (not std::isfinite(scale) or scale < 1.0)
+      throw std::invalid_argument("vector growth scale must be finite and at least 1");
+
+    long double const target = static_cast<long double>(new_size) * scale;
+    if (target > static_cast<long double>(values.max_size()))
+      throw std::length_error("requested vector growth exceeds max_size");
+
+    values.reserve(static_cast<size_t>(target));
+  }
+  values.resize(new_size);
+}
 /*!
  * \brief Simple profiling tool, allows us to time different sections of code
  *

@@ -144,6 +144,7 @@ Options          Short   Value      Description
 
 <<< i/o options >>>
 -restart                 filename   Wavelet output file to restart the simulation.
+-vector-growth           double     Capacity multiplier when a CPU vector grows (default: 2).
 -outfile         -of     filename   File to write the last step of the simulation.
 
 <<< solvers and linear algebra options >>>
@@ -199,6 +200,7 @@ void prog_opts::process_inputs(std::vector<std::string_view> const &argv, handle
       {"-isolve-inner", optentry::isol_inner_iterations},
       {"-isn", optentry::isol_inner_iterations},
       {"-restart", optentry::restart_file},
+      {"-vector-growth", optentry::vector_growth},
   };
 
   auto iarg = argv.cbegin();
@@ -514,6 +516,23 @@ void prog_opts::process_inputs(std::vector<std::string_view> const &argv, handle
       restart_file = *selected;
     }
     break;
+    case optentry::vector_growth: {
+      auto selected = move_process_next();
+      if (not selected)
+        throw std::runtime_error(report_no_value());
+      try {
+        size_t parsed = 0;
+        double const scale = std::stod(std::string(*selected), &parsed);
+        if (parsed != selected->size() or not std::isfinite(scale) or scale < 1.0)
+          throw std::runtime_error(report_wrong_value());
+        vector_growth_scale = scale;
+      } catch(std::invalid_argument const &) {
+        throw std::runtime_error(report_wrong_value());
+      } catch(std::out_of_range const &) {
+        throw std::runtime_error(report_wrong_value());
+      }
+    }
+    break;
     case optentry::title: {
       auto selected = move_process_next();
       if (not selected)
@@ -681,6 +700,7 @@ void prog_opts::print_options(std::ostream &os) const
 
   if (not restart_file.empty())
     os << "  restarting from: " << restart_file << '\n';
+  os << "  CPU vector growth scale: " << vector_growth_scale << '\n';
 }
 
 void prog_opts::print_version_help(std::ostream &os)

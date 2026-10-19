@@ -290,7 +290,8 @@ void discretization_manager<precision>::set_initial_condition()
   #ifdef ASGARD_USE_MPI
   if (not is_leader()) {
     this->grid_sync();
-    state.resize(terms.num_dof());
+    tools::resize_with_growth(state, static_cast<size_t>(terms.num_dof()),
+                              options_.vector_growth_scale);
     terms.prapare_kron_workspace();
     return;
   }
@@ -305,7 +306,8 @@ void discretization_manager<precision>::set_initial_condition()
   int iterations = 0;
   while (keep_refining)
   {
-    state.resize(terms.num_dof());
+    tools::resize_with_growth(state, static_cast<size_t>(terms.num_dof()),
+                              options_.vector_growth_scale);
 
     if (initial_md_)
       terms.interp(grid, terms.conn, {}, time, 1,
