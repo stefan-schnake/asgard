@@ -168,11 +168,36 @@ private:
  * \brief Holds the computed moments
  *
  * Stores the data for each moment after it has been computed,
- * can hold either the hierarchical coefficients or the interpolation values.
+ * can hold either the hierarchical coefficients or the interpolation values. For
+ * compact CPU interpolation moments, const indexing returns a view whose size and
+ * indexing use phase-space point indexes while storage contains position values only.
  */
 template<typename P>
 class momentset {
 public:
+  class value_view {
+  public:
+    value_view(std::vector<P> const &values, int64_t const *block_map,
+               int64_t phase_blocks, int64_t pos_block, int64_t vel_block)
+        : values_(&values), block_map_(block_map), phase_blocks_(phase_blocks),
+          pos_block_(pos_block), vel_block_(vel_block) {}
+
+    int64_t size() const { return phase_blocks_ * pos_block_ * vel_block_; }
+    bool empty() const { return size() == 0; }
+    P const *data() const { return values_->data(); }
+    P const &operator[](int64_t phase_index) const {
+      assert(phase_index >= 0 and phase_index < size());
+      int64_t const block = phase_index / (pos_block_ * vel_block_);
+      int64_t const local = phase_index % (pos_block_ * vel_block_);
+      int64_t const pos_block = block_map_ ? block_map_[block] : block;
+      return (*values_)[pos_block * pos_block_ + local / vel_block_];
+    }
+  private:
+    std::vector<P> const *values_;
+    int64_t const *block_map_;
+    int64_t phase_blocks_, pos_block_, vel_block_;
+  };
+
   //! create an empty moment list
   momentset() = default;
   //! create the new set with the given number of moments
@@ -182,21 +207,38 @@ public:
   size_t size() const { return moms_.size(); }
 
   //! return the provided moment, const variant
-  std::vector<P> const &operator[] (moment_id mid) const { return moms_[mid()]; }
+  value_view operator[] (moment_id mid) const {
+    if (phase_block_to_pos_.empty())
+      return {moms_[mid()], nullptr, static_cast<int64_t>(moms_[mid()].size()), 1, 1};
+    return {moms_[mid()], phase_block_to_pos_.data(), phase_blocks_, pos_block_, vel_block_};
+  }
   //! return the provided moment
   std::vector<P> &operator[] (moment_id mid) { return moms_[mid()]; }
   //! return the provided moment, never const
   std::vector<P> &get(moment_id mid) { return moms_[mid()]; }
+  //! return the provided moment, const variant
+  std::vector<P> const &get(moment_id mid) const { return moms_[mid()]; }
+
+  //! Map phase-space block indexes to their unique position-space block.
+  void set_phase_space_map(std::vector<int64_t> block_to_pos, int64_t pos_block,
+                           int64_t vel_block) {
+    phase_block_to_pos_ = std::move(block_to_pos);
+    phase_blocks_ = static_cast<int64_t>(phase_block_to_pos_.size());
+    pos_block_ = pos_block;
+    vel_block_ = vel_block;
+  }
 
   //! computes approximate memory usage by the object
   size_t used_bytes() const {
     size_t t = 0;
     for (auto const &v : moms_) t += v.size();
-    return t * sizeof(P);
+    return t * sizeof(P) + phase_block_to_pos_.size() * sizeof(int64_t);
   }
 
 private:
   std::vector<std::vector<P>> moms_;
+  std::vector<int64_t> phase_block_to_pos_;
+  int64_t phase_blocks_ = 0, pos_block_ = 1, vel_block_ = 1;
 };
 
 #ifdef ASGARD_USE_GPU

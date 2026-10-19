@@ -579,21 +579,14 @@ void moment_manager<P>::make_nodal(
 
   interp.pos2nodal(pos_grid, raw_vals[id].data(), workspace, kwork);
 
-  interps[id].resize(pntr.back() * full_block);
-
   int const pos_block = pos_grid.block_size();
+  interps[id].resize(pos_grid.num_indexes() * pos_block);
+  std::copy_n(workspace.data(), interps[id].size(), interps[id].data());
 
-  #pragma omp parallel for
-  for (int i = 0; i < pos_grid.num_indexes(); i++)
-  {
-    P *base = interps[id].data() + pntr[i] * full_block;
-    for (int j = 0; j < pos_block; j++)
-      std::fill_n(base + j * vel_block, vel_block, workspace[i * pos_block + j]);
-
-    P *out = base + full_block;
-    for (int j = pntr[i] + 1; j < pntr[i + 1]; j++)
-      out = std::copy_n(base, full_block, out);
-  }
+  std::vector<int64_t> block_to_pos(pntr.back());
+  for (int64_t i = 0; i < pos_grid.num_indexes(); ++i)
+    std::fill(block_to_pos.begin() + pntr[i], block_to_pos.begin() + pntr[i + 1], i);
+  interps.set_phase_space_map(std::move(block_to_pos), pos_block, vel_block);
 }
 
 template<typename P>

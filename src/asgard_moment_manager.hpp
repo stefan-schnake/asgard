@@ -61,14 +61,14 @@ public:
   std::vector<P> const &get_cached_level(moment_id id, hierarchy_manipulator<P> const &hier) const {
     assert(pos_grid.num_dims() == 1); // levels work only for position 1d
     if (full_level[id].empty())
-      complete_level(hier, raw_vals[id], full_level.get(id));
-    return full_level[id];
+      complete_level(hier, raw_vals.get(id), full_level.get(id));
+    return full_level.get(id);
   }
   //! returns the  moment vector, assumes it has already been reconstructed
   std::vector<P> const &get_cached_level(moment_id id) const {
     assert(pos_grid.num_dims() == 1); // levels work only for position 1d
     assert(not full_level[id].empty());
-    return full_level[id];
+    return full_level.get(id);
   }
   //! returns the Poisson solution on the position grid, 1D position uses poisson_level() only
   std::vector<P> const &poisson_raw() const { return poisson_raw_; }
@@ -95,7 +95,7 @@ public:
     static_assert(std::is_same_v<decltype(ids[0]), moment_id const> or std::is_same_v<decltype(ids[0]), moment_id const &>);
     for (int i = 0; i < num; i++) {
       if (full_level[ids[i]].empty())
-        complete_level(hier, raw_vals[ids[i]], full_level.get(ids[i]));
+        complete_level(hier, raw_vals.get(ids[i]), full_level.get(ids[i]));
     }
   }
   //! return the set of cached raw moments defined on the position grid

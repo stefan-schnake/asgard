@@ -441,9 +441,9 @@ void hybrid_maxwellian_collision()
   md_mom_and_idx_func<P> hybrid_maxwellian =
       [=](P, tensor_nodes<P> const &nodes, momentset<P> const &moments,
           std::vector<int> const &indexes, std::vector<P> &vals) -> void {
-    std::vector<P> const &m0 = moments[im0];
-    std::vector<P> const &m1 = moments[im1];
-    std::vector<P> const &m2 = moments[im2];
+    auto const &m0 = moments[im0];
+    auto const &m1 = moments[im1];
+    auto const &m2 = moments[im2];
 
     assert(vals.size() == static_cast<size_t>(nodes.num_points()));
     assert(m0.size() == vals.size());

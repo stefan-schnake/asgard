@@ -103,8 +103,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m1over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                          std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0 = moments[m0];
-          std::vector<P> const &mom1 = moments[m1];
+          auto const &mom0 = moments[m0];
+          auto const &mom1 = moments[m1];
           assert(static_cast<size_t>(x.num_strips()) == mom0.size());
           assert(static_cast<size_t>(x.num_strips()) == mom1.size());
           ASGARD_OMP_PARFOR_SIMD
@@ -115,9 +115,9 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto theta = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                        std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0 = moments[m0];
-          std::vector<P> const &mom1 = moments[m1];
-          std::vector<P> const &mom2 = moments[m2];
+          auto const &mom0 = moments[m0];
+          auto const &mom1 = moments[m1];
+          auto const &mom2 = moments[m2];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = nu * (mom2[i] / mom0[i] - (mom1[i] * mom1[i]) / (mom0[i] * mom0[i])) * f[i];
@@ -182,8 +182,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m10over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                           std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0  = moments[m0];
-          std::vector<P> const &mom10 = moments[m10];
+          auto const &mom0  = moments[m0];
+          auto const &mom10 = moments[m10];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (nu * mom10[i] * f[i]) / mom0[i];
@@ -191,8 +191,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m01over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                           std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0  = moments[m0];
-          std::vector<P> const &mom01 = moments[m01];
+          auto const &mom0  = moments[m0];
+          auto const &mom01 = moments[m01];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (nu * mom01[i] * f[i]) / mom0[i];
@@ -200,11 +200,11 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto theta = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                        std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0  = moments[m0];
-          std::vector<P> const &mom10 = moments[m10];
-          std::vector<P> const &mom01 = moments[m01];
-          std::vector<P> const &mom20 = moments[m20];
-          std::vector<P> const &mom02 = moments[m02];
+          auto const &mom0  = moments[m0];
+          auto const &mom10 = moments[m10];
+          auto const &mom01 = moments[m01];
+          auto const &mom20 = moments[m20];
+          auto const &mom02 = moments[m02];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = 0.5 *  nu * f[i] *
@@ -290,8 +290,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m100over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                            std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0   = moments[m0];
-          std::vector<P> const &mom100 = moments[m100];
+          auto const &mom0   = moments[m0];
+          auto const &mom100 = moments[m100];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (nu * mom100[i] * f[i]) / mom0[i];
@@ -299,8 +299,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m010over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                            std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0   = moments[m0];
-          std::vector<P> const &mom010 = moments[m010];
+          auto const &mom0   = moments[m0];
+          auto const &mom010 = moments[m010];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (nu * mom010[i] * f[i]) / mom0[i];
@@ -308,8 +308,8 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto m001over0 = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                            std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0   = moments[m0];
-          std::vector<P> const &mom001 = moments[m001];
+          auto const &mom0   = moments[m0];
+          auto const &mom001 = moments[m001];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (nu * mom001[i] * f[i]) / mom0[i];
@@ -317,13 +317,13 @@ void pde_scheme<P>::process(operators::lenard_bernstein_collisions lbc)
       auto theta = [=](P, vector2d<P> const &x, momentset<P> const &moments,
                        std::vector<P> const &f, std::vector<P> &vals) -> void
         {
-          std::vector<P> const &mom0  = moments[m0];
-          std::vector<P> const &mom100 = moments[m100];
-          std::vector<P> const &mom010 = moments[m010];
-          std::vector<P> const &mom001 = moments[m001];
-          std::vector<P> const &mom200 = moments[m200];
-          std::vector<P> const &mom020 = moments[m020];
-          std::vector<P> const &mom002 = moments[m002];
+          auto const &mom0  = moments[m0];
+          auto const &mom100 = moments[m100];
+          auto const &mom010 = moments[m010];
+          auto const &mom001 = moments[m001];
+          auto const &mom200 = moments[m200];
+          auto const &mom020 = moments[m020];
+          auto const &mom002 = moments[m002];
           ASGARD_OMP_PARFOR_SIMD
           for (int64_t i = 0; i < x.num_strips(); i++)
             vals[i] = (P{1} / P{3}) *  nu * f[i] *
@@ -533,9 +533,9 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)
     {
-      std::vector<P> const &m0 = moments[im0];
-      std::vector<P> const &m1 = moments[im1];
-      std::vector<P> const &m2 = moments[im2];
+      auto const &m0 = moments[im0];
+      auto const &m1 = moments[im1];
+      auto const &m2 = moments[im2];
 
       int64_t const num_points = [&]() {
         if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
@@ -604,11 +604,11 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)
     {
-      std::vector<P> const &m0  = moments[im0];
-      std::vector<P> const &m10 = moments[im10];
-      std::vector<P> const &m01 = moments[im01];
-      std::vector<P> const &m20 = moments[im20];
-      std::vector<P> const &m02 = moments[im02];
+      auto const &m0  = moments[im0];
+      auto const &m10 = moments[im10];
+      auto const &m01 = moments[im01];
+      auto const &m20 = moments[im20];
+      auto const &m02 = moments[im02];
 
       int64_t const num_points = [&]() {
         if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
@@ -685,13 +685,13 @@ void pde_scheme<P>::process(operators::simple_bgk_collisions bgkc)
                     std::vector<int> const &indexes,
                     std::vector<P> &vals)
     {
-      std::vector<P> const &m0   = moments[im0];
-      std::vector<P> const &m100 = moments[im100];
-      std::vector<P> const &m010 = moments[im010];
-      std::vector<P> const &m001 = moments[im001];
-      std::vector<P> const &m200 = moments[im200];
-      std::vector<P> const &m020 = moments[im020];
-      std::vector<P> const &m002 = moments[im002];
+      auto const &m0   = moments[im0];
+      auto const &m100 = moments[im100];
+      auto const &m010 = moments[im010];
+      auto const &m001 = moments[im001];
+      auto const &m200 = moments[im200];
+      auto const &m020 = moments[im020];
+      auto const &m002 = moments[im002];
 
       #pragma omp parallel
       {

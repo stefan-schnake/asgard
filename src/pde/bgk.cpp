@@ -290,9 +290,9 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
     auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, std::vector<P> &vals)
     {
-      std::vector<P> const &m0 = moments[im0];
-      std::vector<P> const &m1 = moments[im1];
-      std::vector<P> const &m2 = moments[im2];
+      auto const &m0 = moments[im0];
+      auto const &m1 = moments[im1];
+      auto const &m2 = moments[im2];
 
       int64_t const num_nodes = [&]() {
         if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
@@ -365,11 +365,11 @@ asgard::pde_scheme<P> make_bgk(pde_mode mode, asgard::prog_opts options) {
     auto fbgk = [=](P /* time */, auto const &nodes,
                     asgard::momentset<P> const &moments, std::vector<P> &vals)
     {
-      std::vector<P> const &m0 = moments[im0];
-      std::vector<P> const &m10 = moments[im10];
-      std::vector<P> const &m01 = moments[im01];
-      std::vector<P> const &m20 = moments[im20];
-      std::vector<P> const &m02 = moments[im02];
+      auto const &m0 = moments[im0];
+      auto const &m10 = moments[im10];
+      auto const &m01 = moments[im01];
+      auto const &m20 = moments[im20];
+      auto const &m02 = moments[im02];
 
       int64_t const num_nodes = [&]() {
         if constexpr (std::is_same_v<std::decay_t<decltype(nodes)>, asgard::tensor_nodes<P>>)
